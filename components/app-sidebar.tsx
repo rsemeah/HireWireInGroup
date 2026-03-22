@@ -12,6 +12,7 @@ import {
   ScrollText,
   BarChart3,
   Settings,
+  PlusCircle,
 } from "lucide-react"
 import {
   Sidebar,
@@ -36,6 +37,7 @@ const navigation = [
   { name: "Companies", href: "/companies", icon: Building2 },
   { name: "Logs", href: "/logs", icon: ScrollText },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
+  { name: "Manual Job Entry", href: "/manual-entry", icon: PlusCircle },
 ]
 
 const bottomNavigation = [
