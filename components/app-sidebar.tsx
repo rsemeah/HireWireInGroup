@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -49,12 +50,19 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border px-6 py-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            HW
+      <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
+        <Link href="/" className="flex items-center gap-3">
+          <Image
+            src="/hirewire-logo.png"
+            alt="HireWire Logo"
+            width={36}
+            height={36}
+            className="rounded-lg"
+          />
+          <div className="flex flex-col">
+            <span className="font-semibold text-lg leading-tight">HireWire</span>
+            <span className="text-[10px] text-muted-foreground tracking-widest uppercase">Jobs Connected</span>
           </div>
-          <span className="font-semibold text-lg">HireWire</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>

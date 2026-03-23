@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -101,6 +103,17 @@ export function Topbar() {
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="mr-2 h-4" />
+      
+      {/* Mobile Logo - visible only when sidebar is collapsed on mobile */}
+      <Link href="/" className="flex items-center gap-2 md:hidden">
+        <Image
+          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/image-dtN0wciBBW9j1oWxctYn06P6qD9Rch.png"
+          alt="HireWire"
+          width={28}
+          height={28}
+          className="rounded-md"
+        />
+      </Link>
 
       {/* Global Search */}
       <Popover open={searchOpen} onOpenChange={setSearchOpen}>
