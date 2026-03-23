@@ -1,75 +1,34 @@
-"use client"
-
-import { use, useState } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import { getJobWithRelations } from "@/lib/mock-data"
-import type { JobStatus } from "@/lib/types"
-import { StatusBadge, FitBadge, SourceBadge } from "@/components/status-badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getJobById } from "@/lib/actions/jobs"
+import { JobDetail } from "@/components/job-detail"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  ExternalLink,
-  CheckCircle,
-  Send,
-  XCircle,
-  Copy,
-  ArrowLeft,
-  MapPin,
-  DollarSign,
-  Building2,
-  Calendar,
-  CheckCheck,
-  AlertCircle,
-} from "lucide-react"
-import { toast } from "sonner"
-
-const ALL_STATUSES: JobStatus[] = [
-  "NEW",
-  "SCORED",
-  "READY_TO_APPLY",
-  "APPLIED",
-  "REJECTED",
-  "INTERVIEW",
-  "OFFER",
-  "ARCHIVED",
-]
+import { ArrowLeft, AlertCircle } from "lucide-react"
+import Link from "next/link"
 
 interface PageProps {
   params: Promise<{ id: string }>
 }
 
-export default function JobDetailPage({ params }: PageProps) {
-  const { id } = use(params)
-  const router = useRouter()
-  const jobData = getJobWithRelations(id)
-  
-  const [status, setStatus] = useState<JobStatus>(jobData?.status || "NEW")
+export default async function JobDetailPage({ params }: PageProps) {
+  const { id } = await params
+  const job = await getJobById(id)
 
-  if (!jobData) {
+  if (!job) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
         <AlertCircle className="h-12 w-12 text-muted-foreground" />
         <h2 className="text-xl font-semibold">Job not found</h2>
-        <Button variant="outline" onClick={() => router.push("/jobs")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Jobs
+        <p className="text-muted-foreground">This job may have been deleted or doesn&apos;t exist.</p>
+        <Button variant="outline" asChild>
+          <Link href="/jobs">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Jobs
+          </Link>
         </Button>
       </div>
     )
   }
 
+  return <JobDetail job={job} />
   const { documents, application, logs, ...job } = jobData
 
   const resumeDoc = documents.find(d => d.doc_type === "RESUME")

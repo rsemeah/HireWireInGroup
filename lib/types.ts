@@ -1,3 +1,18 @@
+// Enums matching Supabase schema exactly
+export type JobSource = 'JOBOT' | 'ZIPRECRUITER' | 'GREENHOUSE' | 'MANUAL' | string
+
+export type JobStatus = 
+  | 'NEW' 
+  | 'SCORED' 
+  | 'READY_TO_APPLY' 
+  | 'APPLIED' 
+  | 'REJECTED' 
+  | 'INTERVIEW' 
+  | 'OFFER' 
+  | 'ARCHIVED'
+  | string
+
+export type JobFit = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNSCORED' | string
 // ── Enums (must match Supabase schema exactly) ────────────────────────────────
 
 export type JobStatus =
@@ -52,11 +67,28 @@ export interface ScoreKeywords {
 
 // ── Core DB tables ────────────────────────────────────────────────────────────
 
+// Simplified Job interface matching user's Supabase schema
 export interface Job {
   id: string
   title: string
   company: string
   source: JobSource
+  raw_description: string | null
+  score: number | null
+  fit: JobFit | null
+  status: JobStatus
+  created_at: string
+  // Optional extended fields that may exist
+  source_url?: string | null
+  location?: string | null
+  salary_range?: string | null
+  is_remote?: boolean
+  score_reasoning?: Record<string, unknown> | null
+  score_strengths?: string[] | null
+  score_gaps?: string[] | null
+  keywords_extracted?: string[] | null
+  scored_at?: string | null
+  applied_at?: string | null
   source_url: string | null
   source_job_id: string | null
   raw_description: string
