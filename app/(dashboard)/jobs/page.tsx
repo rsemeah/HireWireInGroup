@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
-import { mockJobs } from "@/lib/mock-data"
-import type { JobStatus, JobFit, JobSource } from "@/lib/types"
+import { fetchJobs } from "@/lib/supabase/queries"
+import type { Job, JobStatus, JobFit, JobSource } from "@/lib/types"
 import { StatusBadge, FitBadge, SourceBadge } from "@/components/status-badge"
 import {
   Table,
@@ -48,20 +48,34 @@ function formatDate(dateString: string) {
 }
 
 export default function JobsPage() {
+  // ── Live data state ──────────────────────────────────────────────────────────
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchJobs()
+      .then(setJobs)
+      .catch((err) => setError(err.message ?? "Failed to load jobs"))
+      .finally(() => setLoading(false))
+  }, [])
+
+  // ── Filters (applied client-side against fetched data) ────────────────────
   const [statusFilter, setStatusFilter] = useState<JobStatus | "ALL">("ALL")
   const [fitFilter, setFitFilter] = useState<JobFit | "ALL">("ALL")
   const [sourceFilter, setSourceFilter] = useState<JobSource | "ALL">("ALL")
 
   const filteredJobs = useMemo(() => {
-    return mockJobs.filter((job) => {
+    return jobs.filter((job) => {
       if (statusFilter !== "ALL" && job.status !== statusFilter) return false
       if (fitFilter !== "ALL" && job.fit !== fitFilter) return false
       if (sourceFilter !== "ALL" && job.source !== sourceFilter) return false
       return true
     })
-  }, [statusFilter, fitFilter, sourceFilter])
+  }, [jobs, statusFilter, fitFilter, sourceFilter])
 
-  const hasFilters = statusFilter !== "ALL" || fitFilter !== "ALL" || sourceFilter !== "ALL"
+  const hasFilters =
+    statusFilter !== "ALL" || fitFilter !== "ALL" || sourceFilter !== "ALL"
 
   const clearFilters = () => {
     setStatusFilter("ALL")
@@ -69,13 +83,12 @@ export default function JobsPage() {
     setSourceFilter("ALL")
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
-        <p className="text-muted-foreground">
-          Browse and filter all job listings
-        </p>
+        <p className="text-muted-foreground">Browse and filter all job listings</p>
       </div>
 
       {/* Filters */}
@@ -94,21 +107,19 @@ export default function JobsPage() {
         <CardContent>
           <div className="flex flex-wrap gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-muted-foreground">
-                Status
-              </label>
+              <label className="text-sm font-medium text-muted-foreground">Status</label>
               <Select
                 value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as JobStatus | "ALL")}
+                onValueChange={(v) => setStatusFilter(v as JobStatus | "ALL")}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Statuses</SelectItem>
-                  {ALL_STATUSES.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status.replace(/_/g, " ")}
+                  {ALL_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.replace(/_/g, " ")}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -116,21 +127,19 @@ export default function JobsPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-muted-foreground">
-                Fit
-              </label>
+              <label className="text-sm font-medium text-muted-foreground">Fit</label>
               <Select
                 value={fitFilter}
-                onValueChange={(value) => setFitFilter(value as JobFit | "ALL")}
+                onValueChange={(v) => setFitFilter(v as JobFit | "ALL")}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All Fits" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Fits</SelectItem>
-                  {ALL_FITS.map((fit) => (
-                    <SelectItem key={fit} value={fit}>
-                      {fit}
+                  {ALL_FITS.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -138,21 +147,19 @@ export default function JobsPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-muted-foreground">
-                Source
-              </label>
+              <label className="text-sm font-medium text-muted-foreground">Source</label>
               <Select
                 value={sourceFilter}
-                onValueChange={(value) => setSourceFilter(value as JobSource | "ALL")}
+                onValueChange={(v) => setSourceFilter(v as JobSource | "ALL")}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All Sources" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Sources</SelectItem>
-                  {ALL_SOURCES.map((source) => (
-                    <SelectItem key={source} value={source}>
-                      {source}
+                  {ALL_SOURCES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -178,17 +185,31 @@ export default function JobsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredJobs.length === 0 ? (
+              {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    No jobs found matching the current filters.
+                    Loading jobs…
+                  </TableCell>
+                </TableRow>
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-destructive">
+                    Error: {error}
+                  </TableCell>
+                </TableRow>
+              ) : filteredJobs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    {jobs.length === 0
+                      ? "No jobs in the database yet."
+                      : "No jobs match the current filters."}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredJobs.map((job) => (
                   <TableRow key={job.id} className="cursor-pointer hover:bg-muted/50">
                     <TableCell>
-                      <Link 
+                      <Link
                         href={`/jobs/${job.id}`}
                         className="font-medium hover:underline"
                       >
@@ -203,7 +224,7 @@ export default function JobsPage() {
                       {job.score !== null ? (
                         <span className="font-mono font-medium">{job.score}</span>
                       ) : (
-                        <span className="text-muted-foreground">--</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -223,9 +244,11 @@ export default function JobsPage() {
         </CardContent>
       </Card>
 
-      <div className="text-sm text-muted-foreground">
-        Showing {filteredJobs.length} of {mockJobs.length} jobs
-      </div>
+      {!loading && !error && (
+        <div className="text-sm text-muted-foreground">
+          Showing {filteredJobs.length} of {jobs.length} jobs
+        </div>
+      )}
     </div>
   )
 }

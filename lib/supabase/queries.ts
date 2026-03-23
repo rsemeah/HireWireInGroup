@@ -19,6 +19,15 @@ import type {
 } from "@/lib/types"
 import { parseJsonArray, parseKeywords } from "@/lib/utils"
 
+// ── Resume type (from the resumes table populated by n8n) ─────────────────────
+export interface Resume {
+  id: string
+  job_id: string
+  content: string        // the generated resume text
+  model_used: string | null
+  created_at: string
+}
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
@@ -265,4 +274,18 @@ export async function countAppliedToday(): Promise<number> {
     .gte("applied_at", startOfDay.toISOString())
   if (error) return 0
   return count ?? 0
+}
+
+// ── Resumes (from n8n-populated resumes table) ────────────────────────────────
+
+export async function fetchResumeForJob(jobId: string): Promise<Resume | null> {
+  const { data, error } = await supabase
+    .from("resumes")
+    .select("*")
+    .eq("job_id", jobId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single()
+  if (error) return null
+  return data as Resume
 }

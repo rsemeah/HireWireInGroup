@@ -1,10 +1,11 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { getJobWithRelations } from "@/lib/mock-data"
-import type { JobStatus } from "@/lib/types"
+import { fetchJobById, fetchResumeForJob } from "@/lib/supabase/queries"
+import type { Job, JobStatus } from "@/lib/types"
+import type { Resume } from "@/lib/supabase/queries"
 import { StatusBadge, FitBadge, SourceBadge } from "@/components/status-badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,7 +30,6 @@ import {
   MapPin,
   DollarSign,
   Building2,
-  Calendar,
   CheckCheck,
   AlertCircle,
 } from "lucide-react"
@@ -53,15 +53,60 @@ interface PageProps {
 export default function JobDetailPage({ params }: PageProps) {
   const { id } = use(params)
   const router = useRouter()
-  const jobData = getJobWithRelations(id)
-  
-  const [status, setStatus] = useState<JobStatus>(jobData?.status || "NEW")
 
-  if (!jobData) {
+  // ── Live data ───────────────────────────────────────────────────────────────
+  const [job, setJob] = useState<Job | null>(null)
+  const [resume, setResume] = useState<Resume | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // ── Status is local UI state so the dropdown is responsive ─────────────────
+  const [status, setStatus] = useState<JobStatus>("NEW")
+
+  useEffect(() => {
+    Promise.all([fetchJobById(id), fetchResumeForJob(id)])
+      .then(([jobData, resumeData]) => {
+        if (!jobData) {
+          setError("Job not found")
+          return
+        }
+        setJob(jobData)
+        setStatus(jobData.status)
+        setResume(resumeData)
+      })
+      .catch((err) => setError(err.message ?? "Failed to load job"))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+  const handleStatusChange = (newStatus: JobStatus) => {
+    setStatus(newStatus)
+    toast.success(`Status updated to ${newStatus.replace(/_/g, " ")}`)
+  }
+
+  const handleApprove = () => handleStatusChange("READY_TO_APPLY")
+  const handleMarkApplied = () => handleStatusChange("APPLIED")
+  const handleReject = () => handleStatusChange("REJECTED")
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success(`${label} copied to clipboard`)
+  }
+
+  // ── Loading / error / not found ─────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh] text-muted-foreground">
+        Loading job…
+      </div>
+    )
+  }
+
+  if (error || !job) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
         <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <h2 className="text-xl font-semibold">Job not found</h2>
+        <h2 className="text-xl font-semibold">{error ?? "Job not found"}</h2>
         <Button variant="outline" onClick={() => router.push("/jobs")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Jobs
@@ -70,43 +115,7 @@ export default function JobDetailPage({ params }: PageProps) {
     )
   }
 
-  const { documents, application, logs, ...job } = jobData
-
-  const resumeDoc = documents.find(d => d.doc_type === "RESUME")
-  const coverLetterDoc = documents.find(d => d.doc_type === "COVER_LETTER")
-  const answersDoc = documents.find(d => d.doc_type === "APPLICATION_ANSWERS")
-
-  const handleStatusChange = (newStatus: JobStatus) => {
-    setStatus(newStatus)
-    toast.success(`Status updated to ${newStatus.replace(/_/g, " ")}`)
-  }
-
-  const handleApprove = () => {
-    setStatus("READY_TO_APPLY")
-    toast.success("Job approved and moved to Ready Queue")
-  }
-
-  const handleMarkApplied = () => {
-    setStatus("APPLIED")
-    toast.success("Job marked as applied")
-  }
-
-  const handleReject = () => {
-    setStatus("REJECTED")
-    toast.success("Job rejected")
-  }
-
-  const handleCopy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success(`${label} copied to clipboard`)
-  }
-
-  const handleOpenJob = () => {
-    if (job.source_url) {
-      window.open(job.source_url, "_blank")
-    }
-  }
-
+  // ── Page ────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Back Button */}
@@ -165,7 +174,10 @@ export default function JobDetailPage({ params }: PageProps) {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Status:</span>
-                  <Select value={status} onValueChange={(v) => handleStatusChange(v as JobStatus)}>
+                  <Select
+                    value={status}
+                    onValueChange={(v) => handleStatusChange(v as JobStatus)}
+                  >
                     <SelectTrigger className="w-[180px]">
                       <SelectValue />
                     </SelectTrigger>
@@ -185,14 +197,13 @@ export default function JobDetailPage({ params }: PageProps) {
 
           {/* Tabs */}
           <Tabs defaultValue="description" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="description">Description</TabsTrigger>
               <TabsTrigger value="scoring">Scoring</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
-              <TabsTrigger value="cover-letter">Cover Letter</TabsTrigger>
-              <TabsTrigger value="answers">Answers</TabsTrigger>
             </TabsList>
 
+            {/* Description tab — raw_description, read-only */}
             <TabsContent value="description">
               <Card>
                 <CardHeader>
@@ -208,13 +219,12 @@ export default function JobDetailPage({ params }: PageProps) {
               </Card>
             </TabsContent>
 
+            {/* Scoring tab — from jobs table JSONB fields */}
             <TabsContent value="scoring">
               <Card>
                 <CardHeader>
                   <CardTitle>Scoring Analysis</CardTitle>
-                  <CardDescription>
-                    AI-generated fit assessment
-                  </CardDescription>
+                  <CardDescription>AI-generated fit assessment</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {job.score_reasoning ? (
@@ -237,10 +247,10 @@ export default function JobDetailPage({ params }: PageProps) {
                             Strengths
                           </h4>
                           <ul className="space-y-2">
-                            {job.score_strengths.map((strength, idx) => (
+                            {job.score_strengths.map((s, idx) => (
                               <li key={idx} className="flex items-start gap-2 text-sm">
                                 <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                                {strength}
+                                {s}
                               </li>
                             ))}
                           </ul>
@@ -254,10 +264,10 @@ export default function JobDetailPage({ params }: PageProps) {
                             Gaps
                           </h4>
                           <ul className="space-y-2">
-                            {job.score_gaps.map((gap, idx) => (
+                            {job.score_gaps.map((g, idx) => (
                               <li key={idx} className="flex items-start gap-2 text-sm">
                                 <XCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                                {gap}
+                                {g}
                               </li>
                             ))}
                           </ul>
@@ -272,9 +282,9 @@ export default function JobDetailPage({ params }: PageProps) {
                               ...(job.keywords_extracted.skills ?? []),
                               ...(job.keywords_extracted.tools ?? []),
                               ...(job.keywords_extracted.responsibilities ?? []),
-                            ].map((keyword, idx) => (
+                            ].map((kw, idx) => (
                               <Badge key={idx} variant="secondary">
-                                {keyword}
+                                {kw}
                               </Badge>
                             ))}
                           </div>
@@ -290,23 +300,25 @@ export default function JobDetailPage({ params }: PageProps) {
               </Card>
             </TabsContent>
 
+            {/* Resume tab — from resumes table (populated by n8n) */}
             <TabsContent value="resume">
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle>Generated Resume</CardTitle>
-                      {resumeDoc && (
+                      {resume && (
                         <CardDescription>
-                          Model: {resumeDoc.model_used} | Version: {resumeDoc.prompt_version}
+                          {resume.model_used && `Model: ${resume.model_used} · `}
+                          Generated {new Date(resume.created_at).toLocaleDateString()}
                         </CardDescription>
                       )}
                     </div>
-                    {resumeDoc && (
+                    {resume && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopy(resumeDoc.content, "Resume")}
+                        onClick={() => handleCopy(resume.content, "Resume")}
                       >
                         <Copy className="mr-2 h-4 w-4" />
                         Copy
@@ -315,10 +327,10 @@ export default function JobDetailPage({ params }: PageProps) {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {resumeDoc ? (
+                  {resume ? (
                     <ScrollArea className="h-[500px] pr-4">
                       <pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-lg">
-                        {resumeDoc.content}
+                        {resume.content}
                       </pre>
                     </ScrollArea>
                   ) : (
@@ -329,90 +341,10 @@ export default function JobDetailPage({ params }: PageProps) {
                 </CardContent>
               </Card>
             </TabsContent>
-
-            <TabsContent value="cover-letter">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Generated Cover Letter</CardTitle>
-                      {coverLetterDoc && (
-                        <CardDescription>
-                          Model: {coverLetterDoc.model_used} | Version: {coverLetterDoc.prompt_version}
-                        </CardDescription>
-                      )}
-                    </div>
-                    {coverLetterDoc && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCopy(coverLetterDoc.content, "Cover Letter")}
-                      >
-                        <Copy className="mr-2 h-4 w-4" />
-                        Copy
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {coverLetterDoc ? (
-                    <ScrollArea className="h-[500px] pr-4">
-                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {coverLetterDoc.content}
-                      </div>
-                    </ScrollArea>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No cover letter generated for this job yet.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="answers">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Application Answers</CardTitle>
-                      {answersDoc && (
-                        <CardDescription>
-                          Model: {answersDoc.model_used} | Version: {answersDoc.prompt_version}
-                        </CardDescription>
-                      )}
-                    </div>
-                    {answersDoc && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCopy(answersDoc.content, "Answers")}
-                      >
-                        <Copy className="mr-2 h-4 w-4" />
-                        Copy
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {answersDoc ? (
-                    <ScrollArea className="h-[500px] pr-4">
-                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {answersDoc.content}
-                      </div>
-                    </ScrollArea>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No application answers generated for this job yet.
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
           </Tabs>
         </div>
 
-        {/* Right Panel - Actions */}
+        {/* Right Panel */}
         <div className="space-y-4">
           <Card>
             <CardHeader>
@@ -422,7 +354,7 @@ export default function JobDetailPage({ params }: PageProps) {
               <Button
                 className="w-full justify-start"
                 variant="outline"
-                onClick={handleOpenJob}
+                onClick={() => job.source_url && window.open(job.source_url, "_blank")}
                 disabled={!job.source_url}
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
@@ -489,38 +421,14 @@ export default function JobDetailPage({ params }: PageProps) {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Documents</CardTitle>
+              <CardTitle className="text-sm">Resume</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="text-sm">
               <div className="flex items-center justify-between">
-                <span>Resume</span>
-                {resumeDoc ? (
+                <span>Generated Resume</span>
+                {resume ? (
                   <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500">
-                    Generated
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Pending
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Cover Letter</span>
-                {coverLetterDoc ? (
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500">
-                    Generated
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Pending
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Answers</span>
-                {answersDoc ? (
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500">
-                    Generated
+                    Ready
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-muted-foreground">
