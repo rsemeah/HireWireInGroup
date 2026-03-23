@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getJobStats, getJobs } from "@/lib/actions/jobs"
-import { TrendingUp, TrendingDown, Minus, ThumbsUp, Clock, Send } from "lucide-react"
+import { TrendingUp, ThumbsUp, Send, Clock } from "lucide-react"
 import { DashboardCharts } from "@/components/dashboard-charts"
 import { ErrorState } from "@/components/error-state"
 import { HeroSection, HowItWorks, JobUrlInput, OnboardingEmptyState } from "@/components/onboarding"
@@ -23,6 +23,7 @@ export default async function DashboardPage() {
 
   const stats = statsResult
   const jobs = jobsResult.success ? jobsResult.data : []
+  const isFirstTime = stats.total === 0
 
   // Calculate useful stats
   const readyToApply = stats.byStatus["READY_TO_APPLY"] || 0
@@ -62,11 +63,11 @@ export default async function DashboardPage() {
   ]
 
   // Empty state - first time user
-  if (stats.total === 0) {
+  if (isFirstTime) {
     return (
       <div className="space-y-6">
         <HeroSection />
-        <JobUrlInput />
+        <JobUrlInput isFirstTime={true} />
         <HowItWorks />
         <OnboardingEmptyState />
       </div>
@@ -79,7 +80,7 @@ export default async function DashboardPage() {
       <HeroSection />
       
       {/* Quick job URL input */}
-      <JobUrlInput />
+      <JobUrlInput isFirstTime={false} />
 
       {/* Stats Cards - show progress through the pipeline */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
