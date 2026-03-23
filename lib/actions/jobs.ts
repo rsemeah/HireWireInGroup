@@ -82,7 +82,7 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
 
 export async function getJobs(): Promise<JobsResult> {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     
     const { data, error } = await supabase
       .from("jobs")
@@ -102,7 +102,7 @@ export async function getJobs(): Promise<JobsResult> {
 }
 
 export async function getJobById(id: string): Promise<Job | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   const { data, error } = await supabase
     .from("jobs")
@@ -153,7 +153,7 @@ export type StatsResult = {
 
 export async function getJobStats(): Promise<StatsResult> {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     
     const { data, error } = await supabase
       .from("jobs")

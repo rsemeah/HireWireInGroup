@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/server"
 import { StatusBadge } from "@/components/status-badge"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -28,7 +28,7 @@ function formatDate(dateString: string | null) {
 }
 
 export default async function ApplicationsPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   // Fetch jobs that have been applied to
   const { data: appliedJobs, error } = await supabase
