@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import Link from "next/link"
 import type { Job, JobStatus } from "@/lib/types"
 import { updateJobStatus } from "@/lib/actions/jobs"
+import { generateResume, generateCoverLetter, scoreJob } from "@/lib/actions/ai"
 import { StatusBadge, FitBadge, SourceBadge, ScoreBadge } from "@/components/status-badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,6 +29,10 @@ import {
   Calendar,
   FileText,
   Loader2,
+  Sparkles,
+  Copy,
+  Mail,
+  Target,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -49,6 +54,20 @@ interface JobDetailProps {
 export function JobDetail({ job }: JobDetailProps) {
   const [status, setStatus] = useState<JobStatus>(job.status)
   const [isPending, startTransition] = useTransition()
+  
+  // AI generation state
+  const [generatedResume, setGeneratedResume] = useState<string | null>(null)
+  const [generatedCoverLetter, setGeneratedCoverLetter] = useState<string | null>(null)
+  const [isGeneratingResume, setIsGeneratingResume] = useState(false)
+  const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState(false)
+  const [isScoring, setIsScoring] = useState(false)
+  const [scoringResult, setScoringResult] = useState<{
+    score: number
+    fit: string
+    reasoning: string
+    strengths: string[]
+    gaps: string[]
+  } | null>(null)
 
   const handleStatusChange = (newStatus: JobStatus) => {
     setStatus(newStatus)
@@ -71,6 +90,68 @@ export function JobDetail({ job }: JobDetailProps) {
     if (job.source_url) {
       window.open(job.source_url, "_blank")
     }
+  }
+
+  const handleGenerateResume = async () => {
+    setIsGeneratingResume(true)
+    try {
+      const result = await generateResume(job)
+      if (result.success) {
+        setGeneratedResume(result.resume)
+        toast.success("Resume generated successfully!")
+      } else {
+        toast.error(result.error || "Failed to generate resume")
+      }
+    } catch (error) {
+      toast.error("Failed to generate resume")
+    } finally {
+      setIsGeneratingResume(false)
+    }
+  }
+
+  const handleGenerateCoverLetter = async () => {
+    setIsGeneratingCoverLetter(true)
+    try {
+      const result = await generateCoverLetter(job)
+      if (result.success) {
+        setGeneratedCoverLetter(result.coverLetter)
+        toast.success("Cover letter generated successfully!")
+      } else {
+        toast.error(result.error || "Failed to generate cover letter")
+      }
+    } catch (error) {
+      toast.error("Failed to generate cover letter")
+    } finally {
+      setIsGeneratingCoverLetter(false)
+    }
+  }
+
+  const handleScoreJob = async () => {
+    setIsScoring(true)
+    try {
+      const result = await scoreJob(job)
+      if (result.success) {
+        setScoringResult({
+          score: result.score,
+          fit: result.fit,
+          reasoning: result.reasoning,
+          strengths: result.strengths,
+          gaps: result.gaps,
+        })
+        toast.success(`Job scored: ${result.score}/100 (${result.fit} fit)`)
+      } else {
+        toast.error(result.error || "Failed to score job")
+      }
+    } catch (error) {
+      toast.error("Failed to score job")
+    } finally {
+      setIsScoring(false)
+    }
+  }
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success(`${label} copied to clipboard!`)
   }
 
   return (
@@ -145,9 +226,11 @@ export function JobDetail({ job }: JobDetailProps) {
 
           {/* Tabs */}
           <Tabs defaultValue="description" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="description">Description</TabsTrigger>
               <TabsTrigger value="scoring">Scoring</TabsTrigger>
+              <TabsTrigger value="resume">Resume</TabsTrigger>
+              <TabsTrigger value="cover">Cover Letter</TabsTrigger>
             </TabsList>
 
             <TabsContent value="description">
@@ -264,6 +347,120 @@ export function JobDetail({ job }: JobDetailProps) {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="resume">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Generated Resume</CardTitle>
+                      <CardDescription>
+                        AI-tailored resume for this position
+                      </CardDescription>
+                    </div>
+                    {generatedResume && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(generatedResume, "Resume")}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {generatedResume ? (
+                    <ScrollArea className="h-[500px] pr-4">
+                      <pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-lg">
+                        {generatedResume}
+                      </pre>
+                    </ScrollArea>
+                  ) : (
+                    <div className="text-center py-12">
+                      <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                      <p className="text-muted-foreground mb-4">
+                        Generate a tailored resume for this job using AI
+                      </p>
+                      <Button 
+                        onClick={handleGenerateResume}
+                        disabled={isGeneratingResume}
+                      >
+                        {isGeneratingResume ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            Generate Resume
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="cover">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Generated Cover Letter</CardTitle>
+                      <CardDescription>
+                        Personalized cover letter for this application
+                      </CardDescription>
+                    </div>
+                    {generatedCoverLetter && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(generatedCoverLetter, "Cover Letter")}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {generatedCoverLetter ? (
+                    <ScrollArea className="h-[500px] pr-4">
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {generatedCoverLetter}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Mail className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                      <p className="text-muted-foreground mb-4">
+                        Generate a personalized cover letter for this job
+                      </p>
+                      <Button 
+                        onClick={handleGenerateCoverLetter}
+                        disabled={isGeneratingCoverLetter}
+                      >
+                        {isGeneratingCoverLetter ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            Generate Cover Letter
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -301,16 +498,48 @@ export function JobDetail({ job }: JobDetailProps) {
                 Mark Applied
               </Button>
 
+              <Separator />
+
               <Button
                 className="w-full justify-start"
                 variant="secondary"
-                disabled
+                onClick={handleGenerateResume}
+                disabled={isGeneratingResume}
               >
-                <FileText className="mr-2 h-4 w-4" />
+                {isGeneratingResume ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-2 h-4 w-4" />
+                )}
                 Generate Resume
-                <Badge variant="outline" className="ml-auto text-xs">
-                  Coming Soon
-                </Badge>
+              </Button>
+
+              <Button
+                className="w-full justify-start"
+                variant="secondary"
+                onClick={handleGenerateCoverLetter}
+                disabled={isGeneratingCoverLetter}
+              >
+                {isGeneratingCoverLetter ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
+                Generate Cover Letter
+              </Button>
+
+              <Button
+                className="w-full justify-start"
+                variant="outline"
+                onClick={handleScoreJob}
+                disabled={isScoring}
+              >
+                {isScoring ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Target className="mr-2 h-4 w-4" />
+                )}
+                Score Job Fit
               </Button>
             </CardContent>
           </Card>
