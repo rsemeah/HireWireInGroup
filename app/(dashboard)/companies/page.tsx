@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/server"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,7 @@ import { Building2, Briefcase } from "lucide-react"
 import type { Job } from "@/lib/types"
 
 export default async function CompaniesPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   const { data: jobs, error } = await supabase
     .from("jobs")

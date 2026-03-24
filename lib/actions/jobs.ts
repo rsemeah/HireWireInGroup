@@ -48,7 +48,6 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
     else if (url.includes("jobot.com")) source = "JOBOT"
     
     // Create the job record - only use columns that exist in the schema
-    // Based on working queries: title, company, source, status, fit, score, created_at
     const { data, error } = await supabase
       .from("jobs")
       .insert({
@@ -63,7 +62,6 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
       .single()
     
     if (error) {
-      console.error("Error creating job:", error)
       return { success: false, error: error.message }
     }
     
@@ -82,7 +80,7 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
 
 export async function getJobs(): Promise<JobsResult> {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     
     const { data, error } = await supabase
       .from("jobs")
@@ -102,7 +100,7 @@ export async function getJobs(): Promise<JobsResult> {
 }
 
 export async function getJobById(id: string): Promise<Job | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   const { data, error } = await supabase
     .from("jobs")
@@ -111,7 +109,6 @@ export async function getJobById(id: string): Promise<Job | null> {
     .single()
   
   if (error) {
-    console.error("Error fetching job:", error)
     return null
   }
   
@@ -153,7 +150,7 @@ export type StatsResult = {
 
 export async function getJobStats(): Promise<StatsResult> {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     
     const { data, error } = await supabase
       .from("jobs")

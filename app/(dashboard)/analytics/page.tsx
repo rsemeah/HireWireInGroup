@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/server"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { AnalyticsCharts } from "@/components/analytics-charts"
 
 export default async function AnalyticsPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   const { data: jobs, error } = await supabase
     .from("jobs")

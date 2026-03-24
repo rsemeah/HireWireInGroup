@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/server"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export default async function DocumentsPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   // Fetch jobs that have documents (score_strengths or score_gaps populated)
   const { data: jobsWithDocs, error } = await supabase
