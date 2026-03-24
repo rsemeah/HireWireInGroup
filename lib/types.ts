@@ -36,4 +36,9 @@ export interface Job {
   score_strengths?: string[] | null
   score_gaps?: string[] | null
   keywords_extracted?: string[] | null
+  // AI pipeline fields
+  extracted_data?: Record<string, unknown> | null
+  match_data?: Record<string, unknown> | null
+  generated_resume?: string | null
+  generated_cover_letter?: string | null
 }

@@ -55,9 +55,9 @@ export function JobDetail({ job }: JobDetailProps) {
   const [status, setStatus] = useState<JobStatus>(job.status)
   const [isPending, startTransition] = useTransition()
   
-  // AI generation state
-  const [generatedResume, setGeneratedResume] = useState<string | null>(null)
-  const [generatedCoverLetter, setGeneratedCoverLetter] = useState<string | null>(null)
+  // AI generation state - initialize with cached values from database
+  const [generatedResume, setGeneratedResume] = useState<string | null>(job.generated_resume || null)
+  const [generatedCoverLetter, setGeneratedCoverLetter] = useState<string | null>(job.generated_cover_letter || null)
   const [isGeneratingResume, setIsGeneratingResume] = useState(false)
   const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState(false)
   const [isScoring, setIsScoring] = useState(false)
