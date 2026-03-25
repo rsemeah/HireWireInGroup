@@ -3,34 +3,34 @@ import type { JobStatus, JobFit, STATUS_CONFIG } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { CheckCircle2, Circle, Loader2, Clock, AlertCircle, AlertTriangle, Copy, FileX } from "lucide-react"
 
-// Status colors matching the canonical model
+// Editorial status colors - subtle and sophisticated
 const statusColors: Record<JobStatus, string> = {
-  submitted: "bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20",
-  fetching: "bg-blue-400/10 text-blue-400 hover:bg-blue-400/20",
-  parsing: "bg-blue-500/10 text-blue-500 hover:bg-blue-500/20",
-  parsed: "bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20",
-  parsed_partial: "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20",
-  duplicate: "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20",
-  scoring: "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20",
-  scored: "bg-purple-600/10 text-purple-600 hover:bg-purple-600/20",
-  below_threshold: "bg-orange-500/10 text-orange-500 hover:bg-orange-500/20",
-  generating_documents: "bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20",
-  manual_review_required: "bg-amber-600/10 text-amber-600 hover:bg-amber-600/20",
-  ready: "bg-green-500/10 text-green-500 hover:bg-green-500/20",
-  applied: "bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600/20",
-  interviewing: "bg-cyan-600/10 text-cyan-600 hover:bg-cyan-600/20",
-  offered: "bg-green-600/10 text-green-600 hover:bg-green-600/20",
-  rejected: "bg-red-500/10 text-red-500 hover:bg-red-500/20",
-  declined: "bg-gray-500/10 text-gray-500 hover:bg-gray-500/20",
-  archived: "bg-muted text-muted-foreground hover:bg-muted/80",
-  error: "bg-red-600/10 text-red-600 hover:bg-red-600/20",
+  submitted: "bg-secondary text-foreground/70 border-border",
+  fetching: "bg-secondary text-foreground/70 border-border",
+  parsing: "bg-secondary text-foreground/70 border-border",
+  parsed: "bg-secondary text-foreground/80 border-border",
+  parsed_partial: "bg-amber-50 text-amber-700 border-amber-200",
+  duplicate: "bg-secondary text-muted-foreground border-border",
+  scoring: "bg-secondary text-foreground/70 border-border",
+  scored: "bg-secondary text-foreground/80 border-border",
+  below_threshold: "bg-orange-50 text-orange-700 border-orange-200",
+  generating_documents: "bg-secondary text-foreground/70 border-border",
+  manual_review_required: "bg-amber-50 text-amber-700 border-amber-200",
+  ready: "bg-primary/10 text-primary border-primary/20",
+  applied: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  interviewing: "bg-blue-50 text-blue-700 border-blue-200",
+  offered: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rejected: "bg-secondary text-muted-foreground border-border",
+  declined: "bg-secondary text-muted-foreground border-border",
+  archived: "bg-secondary text-muted-foreground border-border",
+  error: "bg-red-50 text-red-700 border-red-200",
 }
 
-// Fit colors
+// Editorial fit colors
 const fitColors: Record<string, string> = {
-  HIGH: "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20",
-  MEDIUM: "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20",
-  LOW: "bg-red-500/10 text-red-500 hover:bg-red-500/20",
+  HIGH: "bg-primary/10 text-primary border-primary/20",
+  MEDIUM: "bg-secondary text-foreground/70 border-border",
+  LOW: "bg-secondary text-muted-foreground border-border",
 }
 
 // Status labels

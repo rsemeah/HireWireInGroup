@@ -10,11 +10,14 @@ export default async function JobsPage() {
   const result = await getJobs()
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Jobs</h1>
+    <div className="space-y-8 max-w-6xl">
+      <div className="space-y-2">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          Pipeline
+        </p>
+        <h1 className="text-3xl font-serif font-medium tracking-tight">All Jobs</h1>
         <p className="text-muted-foreground">
-          Browse and manage your job opportunities
+          Your complete job pipeline. Filter, sort, and track every opportunity.
         </p>
       </div>
 

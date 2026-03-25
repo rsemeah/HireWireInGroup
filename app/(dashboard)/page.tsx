@@ -1,6 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { getJobStats, getJobs } from "@/lib/actions/jobs"
-import { TrendingUp, ThumbsUp, Send, Clock, ArrowRight, AlertTriangle } from "lucide-react"
+import { TrendingUp, ThumbsUp, Send, AlertTriangle, ArrowUpRight } from "lucide-react"
 import { DashboardCharts } from "@/components/dashboard-charts"
 import { ErrorState } from "@/components/error-state"
 import { HeroSection, HowItWorks, JobUrlInput, OnboardingEmptyState, WorkflowSteps } from "@/components/onboarding"
@@ -14,7 +14,7 @@ export default async function DashboardPage() {
 
   if (!statsResult.success) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-8 max-w-5xl">
         <HeroSection />
         <ErrorState 
           title="Unable to connect to your data"
@@ -44,42 +44,42 @@ export default async function DashboardPage() {
 
   const statCards = [
     {
-      name: "High Fit Jobs",
+      name: "High Fit",
       value: highFit,
       icon: TrendingUp,
       description: "Worth pursuing",
-      color: "text-emerald-500",
       href: "/jobs?fit=HIGH",
+      accent: true,
     },
     {
-      name: "Ready to Apply",
+      name: "Ready",
       value: readyToApply,
       icon: ThumbsUp,
-      description: "Materials ready",
-      color: "text-green-500",
+      description: "Materials generated",
       href: "/ready-queue",
+      accent: false,
     },
     {
       name: "Applied",
       value: applied,
       icon: Send,
       description: interviews > 0 ? `${interviews} interviewing` : "Awaiting response",
-      color: "text-blue-500",
       href: "/applications",
+      accent: false,
     },
     {
-      name: "Needs Review",
+      name: "Review",
       value: needsReview,
       icon: AlertTriangle,
-      description: processing > 0 ? `${processing} processing` : "Manual input needed",
-      color: needsReview > 0 ? "text-amber-500" : "text-muted-foreground",
+      description: processing > 0 ? `${processing} processing` : "Needs attention",
       href: "/jobs?status=manual_review_required",
+      accent: needsReview > 0,
     },
   ]
 
   if (isFirstTime) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-8 max-w-5xl">
         <HeroSection />
         <WorkflowSteps />
         <JobUrlInput isFirstTime={true} />
@@ -90,29 +90,27 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 max-w-6xl">
       <HeroSection />
       <JobUrlInput isFirstTime={false} />
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Cards - Editorial Grid */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => (
-          <Link key={stat.name} href={stat.href} className="block">
-            <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {stat.name}
-                </CardTitle>
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-baseline gap-2">
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                  {stat.value > 0 && (
-                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                  )}
+          <Link key={stat.name} href={stat.href} className="group block">
+            <Card className={`h-full transition-all duration-200 ${stat.accent && stat.value > 0 ? 'border-primary/30 bg-primary/[0.02]' : ''}`}>
+              <CardContent className="pt-6 pb-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${stat.accent && stat.value > 0 ? 'bg-primary/10 border-primary/20' : 'bg-secondary border-border'}`}>
+                    <stat.icon className={`h-5 w-5 ${stat.accent && stat.value > 0 ? 'text-primary' : 'text-muted-foreground'}`} />
+                  </div>
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
+                <div className="space-y-1">
+                  <div className="text-3xl font-semibold tracking-tight">{stat.value}</div>
+                  <div className="text-sm font-medium">{stat.name}</div>
+                  <div className="text-xs text-muted-foreground">{stat.description}</div>
+                </div>
               </CardContent>
             </Card>
           </Link>
@@ -121,7 +119,7 @@ export default async function DashboardPage() {
 
       {stats.total < 5 && <HowItWorks />}
 
-      <DashboardCharts stats={stats} jobs={jobs} />
+      {stats.total >= 3 && <DashboardCharts stats={stats} jobs={jobs} />}
     </div>
   )
 }

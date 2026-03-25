@@ -70,9 +70,11 @@ export function DashboardCharts({ stats, jobs }: DashboardChartsProps) {
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {/* Pipeline Funnel */}
       <Card className="col-span-1">
-        <CardHeader>
-          <CardTitle>Pipeline Funnel</CardTitle>
-          <CardDescription>Jobs by pipeline stage</CardDescription>
+        <CardHeader className="pb-2">
+          <p className="text-xs font-medium tracking-[0.15em] uppercase text-muted-foreground mb-1">
+            Pipeline
+          </p>
+          <CardTitle className="text-lg font-medium">Job Funnel</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
@@ -107,9 +109,11 @@ export function DashboardCharts({ stats, jobs }: DashboardChartsProps) {
 
       {/* Jobs by Source */}
       <Card className="col-span-1">
-        <CardHeader>
-          <CardTitle>Jobs by Source</CardTitle>
-          <CardDescription>Distribution across job boards</CardDescription>
+        <CardHeader className="pb-2">
+          <p className="text-xs font-medium tracking-[0.15em] uppercase text-muted-foreground mb-1">
+            Sources
+          </p>
+          <CardTitle className="text-lg font-medium">By Platform</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">
@@ -154,9 +158,11 @@ export function DashboardCharts({ stats, jobs }: DashboardChartsProps) {
 
       {/* Fit Distribution */}
       <Card className="col-span-1">
-        <CardHeader>
-          <CardTitle>Fit Distribution</CardTitle>
-          <CardDescription>Jobs by fit level</CardDescription>
+        <CardHeader className="pb-2">
+          <p className="text-xs font-medium tracking-[0.15em] uppercase text-muted-foreground mb-1">
+            Quality
+          </p>
+          <CardTitle className="text-lg font-medium">By Fit Score</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-[300px]">

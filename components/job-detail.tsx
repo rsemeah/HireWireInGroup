@@ -147,14 +147,16 @@ export function JobDetail({ job }: JobDetailProps) {
   const progressIndex = getStageIndex(status)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-5xl">
       {/* Back button */}
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/jobs">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Jobs
-        </Link>
-      </Button>
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" asChild>
+          <Link href="/jobs">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Jobs
+          </Link>
+        </Button>
+      </div>
 
       {/* Workflow Progress */}
       <Card>
@@ -305,7 +307,7 @@ export function JobDetail({ job }: JobDetailProps) {
                   </p>
                 </div>
               </div>
-              <Button onClick={handleApplyNow} className="bg-green-600 hover:bg-green-700">
+              <Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90 h-11 px-6">
                 <Send className="mr-2 h-4 w-4" />
                 Apply Now
               </Button>
@@ -319,18 +321,19 @@ export function JobDetail({ job }: JobDetailProps) {
         <div className="lg:col-span-2 space-y-6">
           {/* Job Header */}
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-4">
               <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-2xl">{job.title}</CardTitle>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Building2 className="h-4 w-4" />
-                    <span>{job.company}</span>
-                  </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium tracking-[0.15em] uppercase text-muted-foreground">
+                    {job.company}
+                  </p>
+                  <CardTitle className="text-2xl font-serif font-medium tracking-tight">
+                    {job.title}
+                  </CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
                   <SourceBadge source={job.source} />
-                  {!hasScore && <Badge variant="outline">Unscored</Badge>}
+                  {!hasScore && <Badge variant="outline" className="text-xs">Unscored</Badge>}
                 </div>
               </div>
             </CardHeader>

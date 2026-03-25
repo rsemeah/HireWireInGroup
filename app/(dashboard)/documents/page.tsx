@@ -19,11 +19,14 @@ export default async function DocumentsPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Materials</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Library
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Materials</h1>
           <p className="text-muted-foreground">
-            Generated application materials for reviewed jobs
+            AI-generated resumes and cover letters for each opportunity.
           </p>
         </div>
         <ErrorState 
@@ -41,11 +44,14 @@ export default async function DocumentsPage() {
   )
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Materials</h1>
+    <div className="space-y-8 max-w-6xl">
+      <div className="space-y-2">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          Library
+        </p>
+        <h1 className="text-3xl font-serif font-medium tracking-tight">Materials</h1>
         <p className="text-muted-foreground">
-          Generated application materials for reviewed jobs
+          AI-generated resumes and cover letters for each opportunity.
         </p>
       </div>
 

@@ -88,11 +88,14 @@ export default async function LogsPage() {
 
   if (jobsError && !hasEventsTable) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Activity Log</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            History
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Activity Log</h1>
           <p className="text-muted-foreground">
-            Processing events and job activity
+            Real-time processing events and job activity.
           </p>
         </div>
         <ErrorState 
@@ -109,11 +112,14 @@ export default async function LogsPage() {
   // If we have processing_events, show them
   if (hasEventsTable && events.length > 0) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Activity Log</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            History
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Activity Log</h1>
           <p className="text-muted-foreground">
-            Real-time processing events from n8n workflows
+            Real-time processing events and job activity.
           </p>
         </div>
 
@@ -256,11 +262,14 @@ export default async function LogsPage() {
   }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Activity Log</h1>
+    <div className="space-y-8 max-w-6xl">
+      <div className="space-y-2">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          History
+        </p>
+        <h1 className="text-3xl font-serif font-medium tracking-tight">Activity Log</h1>
         <p className="text-muted-foreground">
-          Recent activity and job status changes
+          Real-time processing events and job activity.
         </p>
       </div>
 

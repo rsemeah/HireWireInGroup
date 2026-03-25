@@ -39,11 +39,14 @@ export default async function ApplicationsPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Applications</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Tracking
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Applications</h1>
           <p className="text-muted-foreground">
-            Track submitted applications and interview schedules
+            Track submitted applications and interview progress.
           </p>
         </div>
         <ErrorState 
@@ -57,11 +60,14 @@ export default async function ApplicationsPage() {
   const applications = appliedJobs || []
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Applications</h1>
+    <div className="space-y-8 max-w-6xl">
+      <div className="space-y-2">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          Tracking
+        </p>
+        <h1 className="text-3xl font-serif font-medium tracking-tight">Applications</h1>
         <p className="text-muted-foreground">
-          Track submitted applications and interview schedules
+          Track submitted applications and interview progress.
         </p>
       </div>
 
