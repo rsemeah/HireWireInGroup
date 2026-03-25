@@ -2,7 +2,7 @@
 
 ## Overview
 
-HireWire is a job application dashboard with a strict separation of concerns:
+HireWire is a job application dashboard with strict separation of concerns:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -13,46 +13,32 @@ HireWire is a job application dashboard with a strict separation of concerns:
          └───────────────── reads ───────────────────────┘
 ```
 
-## Architectural Rules
+## Layer Responsibilities
 
-### 1. Frontend is a Thin Client ONLY
-
-The Next.js frontend should:
+### Frontend (Next.js) — Display Only
 - Accept job URL input from users
-- Validate only basic URL correctness (valid URL, http/https protocol)
-- Submit URLs to the n8n intake webhook
+- Validate basic URL correctness (valid URL, http/https protocol)
+- Submit URLs to n8n intake webhook with `request_id` for tracing
 - Read job state from Supabase
-- Display honest status, partial parse, duplicate, manual review, generation, complete, and error states
-- Allow users to manually change status and view generated materials
+- Display honest status indicators (processing, partial parse, duplicate, error)
+- Allow users to manually update status and view generated materials
 
-The frontend should NOT:
-- Fetch or parse job pages
-- Score jobs against profiles
-- Generate resumes or cover letters
-- Make decisions about job fit
-- Perform deduplication logic
-
-### 2. n8n Owns All Orchestration and Business Logic
-
-n8n workflows handle:
-- Fetching job pages from URLs
-- Source detection (Greenhouse, Lever, LinkedIn, etc.)
-- Parsing job details (title, company, location, description, requirements)
+### n8n — All Business Logic
+- Fetch job pages from URLs
+- Detect source (Greenhouse, Lever, LinkedIn, etc.)
+- Parse job details (title, company, location, requirements)
 - Canonicalization and deduplication
-- Scoring against user profile
-- Resume generation
-- Cover letter generation
-- Writing results back to Supabase
-- Logging processing events
+- Score against user profile
+- Generate resumes and cover letters
+- Write results to Supabase
+- Log processing events
 
-### 3. Supabase Owns All Persistent State
-
-Supabase stores:
-- `jobs` - Canonical job records with lifecycle state
-- `user_profile` - User profile for scoring and generation
-- `processing_events` - Detailed workflow event logs (created by n8n)
-- `generated_documents` - Generated materials (optional separate table)
-- `profile_versions` - Profile snapshots for reproducibility (future)
+### Supabase — All Persistent State
+- `jobs` — Canonical job records with lifecycle state
+- `user_profile` — User profile for scoring and generation
+- `processing_events` — Workflow event logs (from n8n)
+- `generated_documents` — Versioned materials
+- `profile_snapshots` — Profile versions for reproducibility
 
 ## Job Lifecycle States
 
@@ -69,14 +55,14 @@ Error state: `error` (can occur at any step)
 
 ## Environment Variables
 
-### Required
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (server-side)
-- `N8N_JOB_INTAKE_WEBHOOK_URL` - n8n webhook endpoint for job intake
-
-### Optional
-- `N8N_JOB_INTAKE_WEBHOOK_TOKEN` - Bearer token for webhook auth
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key |
+| `N8N_JOB_INTAKE_WEBHOOK_URL` | Yes | n8n webhook for job intake |
+| `N8N_JOB_INTAKE_WEBHOOK_TOKEN` | No | Bearer token for webhook auth |
+| `GROQ_API_KEY` | No | For AI features (if not using n8n) |
 
 ## API Contracts
 
@@ -85,8 +71,7 @@ Error state: `error` (can occur at any step)
 {
   "url": "https://boards.greenhouse.io/company/jobs/123",
   "source_hint": "GREENHOUSE",
-  "submitted_by_user_id": "user-uuid",
-  "request_id": "req-uuid"
+  "request_id": "uuid-for-tracing"
 }
 ```
 
@@ -94,77 +79,56 @@ Error state: `error` (can occur at any step)
 ```json
 {
   "accepted": true,
-  "request_id": "req-uuid",
+  "request_id": "uuid-for-tracing",
   "job_id": "job-uuid",
   "status": "processing_started",
-  "message": "Job submitted for processing",
   "duplicate": false,
   "partial_parse": false
 }
 ```
 
-## Current Transitional Violations
+## Database Schema (Applied)
 
-None - the frontend is now a thin client. All AI processing logic has been removed.
+### jobs table
+Key fields:
+- `id`, `title`, `company`, `source`, `source_url`, `status`, `fit`, `score`
+- `canonical_url`, `ats_job_id`, `fingerprint_hash` — deduplication
+- `duplicate_of_job_id` — links to original if duplicate
+- `parse_quality`, `parse_missing_fields` — parse status
+- `score_*` — structured scoring breakdown
+- `generated_resume`, `generated_cover_letter` — AI materials
+- `error_message`, `error_step` — error tracking
+- `request_id` — traces back to original request
 
-## What Must Be Implemented in n8n
-
-1. **Job Intake Workflow**
-   - Receive webhook POST with URL
-   - Detect source (Greenhouse, Lever, LinkedIn, generic)
-   - Fetch page content
-   - Parse job details
-   - Check for duplicates
-   - Write initial job record to Supabase
-
-2. **Scoring Workflow**
-   - Read job and user profile from Supabase
-   - Calculate structured fit score
-   - Identify strengths and gaps
-   - Update job with score
-   - Log scoring event
-
-3. **Generation Workflow**
-   - Read job and profile
-   - Generate tailored resume
-   - Generate cover letter
-   - Update job with generated materials
-   - Log generation event
-
-4. **Event Logging**
-   - Create `processing_events` table in Supabase
-   - Log all workflow steps for observability
-
-## Supabase Schema Requirements
-
-### jobs table (existing, needs expansion)
+### processing_events table
 ```sql
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parse_quality text;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parse_missing_fields text[];
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_title_match numeric;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_seniority_match numeric;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_domain_match numeric;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_location_match numeric;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_skills_match numeric;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_compensation_match numeric;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_dealbreakers text[];
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS score_summary text;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS canonical_url text;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS ats_job_id text;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS fingerprint_hash text;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS duplicate_of_job_id uuid;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS generation_profile_version text;
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS generation_timestamp timestamptz;
+id uuid PRIMARY KEY
+job_id uuid REFERENCES jobs(id)
+request_id uuid
+event_type text NOT NULL
+message text
+metadata jsonb
+created_at timestamptz
 ```
 
-### processing_events table (new)
-```sql
-CREATE TABLE processing_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  job_id uuid REFERENCES jobs(id),
-  event_type text NOT NULL,
-  message text,
-  metadata jsonb,
-  created_at timestamptz DEFAULT now()
-);
-```
+### profile_snapshots table
+Stores frozen profile state at generation time for reproducibility.
+
+### generated_documents table
+Stores versioned resume/cover letter with model metadata.
+
+## n8n Implementation Requirements
+
+1. **Intake Workflow** — Receive URL, fetch page, parse, dedup, write to Supabase
+2. **Scoring Workflow** — Read job + profile, calculate fit, update job
+3. **Generation Workflow** — Generate resume + cover letter, update job
+4. **Event Logging** — Log all steps to `processing_events`
+
+## Design Tokens
+
+The UI uses a warm neutral editorial palette:
+- Background: soft cream (`#FAF8F5`)
+- Cards: soft white (`#FEFEFE`)
+- Text: charcoal (`#1A1A1A`)
+- Accent: bold red (`#C41E3A`) for primary actions
+- Typography: Fraunces (serif headings), Inter (body)

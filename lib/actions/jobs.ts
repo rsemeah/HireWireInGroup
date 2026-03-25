@@ -120,6 +120,9 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
       }
     }
 
+    // Generate request_id for tracing through the pipeline
+    const requestId = crypto.randomUUID()
+
     const headers: HeadersInit = {
       "Content-Type": "application/json",
     }
@@ -134,6 +137,7 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
       body: JSON.stringify({
         url: normalizedUrl,
         source_hint: sourceHint,
+        request_id: requestId,
       }),
       cache: "no-store",
     })
