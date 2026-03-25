@@ -183,6 +183,49 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     }
 
     setCreatedJob(result.job)
+    
+    // Step 2: Full-auto AI processing
+    setStep("reviewing")
+    
+    try {
+      const processResponse = await fetch("/api/jobs/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: result.job.id }),
+      })
+      
+      if (processResponse.ok) {
+        const processResult = await processResponse.json()
+        
+        // Step 3: Processing complete
+        setStep("preparing")
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Step 4: Complete with details
+        setStep("complete")
+        
+        if (processResult.score >= 60) {
+          toast.success("Job is ready to apply!", {
+            description: `Score: ${processResult.score}/100 (${processResult.fit} fit). Resume generated.`,
+          })
+        } else {
+          toast.success("Job analyzed!", {
+            description: `Score: ${processResult.score}/100. Review details to decide.`,
+          })
+        }
+      } else {
+        // Processing failed but job was created
+        setStep("complete")
+        toast.info("Job added - processing will continue in background", {
+          description: "View the job to see details.",
+        })
+      }
+    } catch (processError) {
+      // Processing failed but job was created
+      console.error("Process error:", processError)
+      setStep("complete")
+      toast.info("Job added", {
+        description: "Manual review may be needed.",
     setIsDuplicate(result.duplicate)
     setIsPartialParse(result.partialParse)
     setSubmissionMessage(result.message || null)
@@ -367,6 +410,9 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
 
 function ProcessingSteps({ currentStep }: { currentStep: ProcessingStep }) {
   const steps = [
+    { key: "fetching", label: "Creating job record" },
+    { key: "reviewing", label: "AI analyzing fit & generating materials" },
+    { key: "preparing", label: "Finalizing resume & cover letter" },
     { key: "submitting", label: "Submitting URL" },
     { key: "complete", label: "Job visible in Supabase" },
   ]
