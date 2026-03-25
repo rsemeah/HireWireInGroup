@@ -16,7 +16,8 @@ import {
   ArrowRight,
   ExternalLink,
   Briefcase,
-  ListChecks
+  ListChecks,
+  AlertTriangle
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -85,27 +86,27 @@ export function HowItWorks() {
     {
       icon: Link2,
       title: "Paste a job URL",
-      description: "Drop in a link from Greenhouse, Lever, or any job posting",
+      description: "Drop in a link from Greenhouse, Lever, or LinkedIn",
     },
     {
       icon: Search,
-      title: "HireWire reviews the role",
-      description: "AI analyzes the job against your background and preferences",
+      title: "n8n processes the job",
+      description: "Parses details, deduplicates, scores against your profile",
     },
     {
       icon: ThumbsUp,
-      title: "See a go or no-go decision",
-      description: "Get a clear fit score with strengths and gaps identified",
+      title: "See your fit score",
+      description: "Get a clear score with strengths and gaps identified",
     },
     {
       icon: FileText,
-      title: "View tailored application materials",
-      description: "Resume highlights and cover letter customized for this role",
+      title: "Get tailored materials",
+      description: "Resume and cover letter customized for this role",
     },
     {
       icon: CheckCircle2,
-      title: "Track your application status",
-      description: "Monitor progress from review to interview to offer",
+      title: "Apply and track",
+      description: "One-click apply with status tracking",
     },
   ]
 
@@ -171,7 +172,7 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     }
 
     setStep("submitting")
-    toast.info("Submitting URL to ingestion workflow...")
+    toast.info("Submitting URL to n8n workflow...")
 
     const result = await createJobFromUrl(url)
 
@@ -183,49 +184,6 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     }
 
     setCreatedJob(result.job)
-    
-    // Step 2: Full-auto AI processing
-    setStep("reviewing")
-    
-    try {
-      const processResponse = await fetch("/api/jobs/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: result.job.id }),
-      })
-      
-      if (processResponse.ok) {
-        const processResult = await processResponse.json()
-        
-        // Step 3: Processing complete
-        setStep("preparing")
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        // Step 4: Complete with details
-        setStep("complete")
-        
-        if (processResult.score >= 60) {
-          toast.success("Job is ready to apply!", {
-            description: `Score: ${processResult.score}/100 (${processResult.fit} fit). Resume generated.`,
-          })
-        } else {
-          toast.success("Job analyzed!", {
-            description: `Score: ${processResult.score}/100. Review details to decide.`,
-          })
-        }
-      } else {
-        // Processing failed but job was created
-        setStep("complete")
-        toast.info("Job added - processing will continue in background", {
-          description: "View the job to see details.",
-        })
-      }
-    } catch (processError) {
-      // Processing failed but job was created
-      console.error("Process error:", processError)
-      setStep("complete")
-      toast.info("Job added", {
-        description: "Manual review may be needed.",
     setIsDuplicate(result.duplicate)
     setIsPartialParse(result.partialParse)
     setSubmissionMessage(result.message || null)
@@ -233,24 +191,24 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
 
     if (result.duplicate) {
       toast.warning("This job already exists", {
-        description: "We linked you to the existing record instead of creating a duplicate.",
+        description: "Linked to the existing record.",
       })
     } else {
-      toast.success("Job submitted successfully", {
-        description: "The job was sent to n8n for parsing and scoring.",
+      toast.success("Job submitted to n8n", {
+        description: "Processing will happen in the background.",
       })
     }
 
     if (result.partialParse) {
       toast.warning("Job was partially parsed", {
-        description: "Scoring and resume generation may be limited until details are completed.",
+        description: "Some details may need manual entry.",
       })
     }
     
     onSubmitSuccess?.()
   }
 
-  const handleViewReview = () => {
+  const handleViewJob = () => {
     if (createdJob) {
       router.push(`/jobs/${createdJob.id}`)
     } else {
@@ -268,7 +226,7 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     setSubmissionMessage(null)
   }
 
-  // Success state - show after job is created
+  // Success state
   if (step === "complete" && createdJob) {
     return (
       <Card id="review-job" className="border-green-500/50 bg-green-500/5">
@@ -280,30 +238,36 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
             <div className="space-y-2">
               <h3 className="text-xl font-semibold">Job Submitted</h3>
               <p className="text-muted-foreground max-w-md">
-                The URL was sent to n8n for ingestion, parsing, deduplication, scoring, and Supabase persistence.
+                Sent to n8n for parsing, scoring, and material generation.
               </p>
               {submissionMessage && (
-                <p className="text-xs text-muted-foreground max-w-md">{submissionMessage}</p>
+                <p className="text-xs text-muted-foreground">{submissionMessage}</p>
               )}
               {isDuplicate && (
-                <p className="text-sm text-amber-600">This URL already existed, so we reused the existing job.</p>
+                <p className="text-sm text-amber-600 flex items-center justify-center gap-1">
+                  <AlertTriangle className="h-4 w-4" />
+                  Duplicate - linked to existing job
+                </p>
               )}
               {isPartialParse && (
-                <p className="text-sm text-amber-600">Parsing was incomplete. Scoring/generation may be limited.</p>
+                <p className="text-sm text-amber-600 flex items-center justify-center gap-1">
+                  <AlertTriangle className="h-4 w-4" />
+                  Partial parse - some details may be missing
+                </p>
               )}
               <p className="text-sm text-muted-foreground">
                 <span className="font-medium">{createdJob.company}</span> - {createdJob.title}
               </p>
             </div>
             <div className="flex flex-wrap gap-3 pt-2">
-              <Button onClick={handleViewReview}>
+              <Button onClick={handleViewJob}>
                 <Briefcase className="mr-2 h-4 w-4" />
                 View Job
               </Button>
               <Button variant="outline" asChild>
                 <Link href="/jobs">
                   <ListChecks className="mr-2 h-4 w-4" />
-                  View All Jobs
+                  All Jobs
                 </Link>
               </Button>
               <Button variant="ghost" onClick={handleReset}>
@@ -328,17 +292,13 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
             <div className="space-y-2">
               <h3 className="text-xl font-semibold">Failed to Add Job</h3>
               <p className="text-muted-foreground max-w-md">
-                {error || "Something went wrong while adding this job. Please try again."}
+                {error || "Something went wrong. Please try again."}
               </p>
             </div>
             <div className="flex gap-3 pt-2">
-              <Button onClick={handleReset}>
-                Try Again
-              </Button>
+              <Button onClick={handleReset}>Try Again</Button>
               <Button variant="outline" asChild>
-                <Link href="/manual-entry">
-                  Add Manually
-                </Link>
+                <Link href="/manual-entry">Add Manually</Link>
               </Button>
             </div>
           </div>
@@ -353,16 +313,13 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
       <Card id="review-job">
         <CardContent className="py-8">
           <div className="flex flex-col items-center text-center space-y-6">
-            <div className="relative">
-              <div className="rounded-full bg-primary/20 p-4">
-                <Loader2 className="h-8 w-8 text-primary animate-spin" />
-              </div>
+            <div className="rounded-full bg-primary/20 p-4">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
             </div>
-            <div className="space-y-4 w-full max-w-sm">
-              <h3 className="text-lg font-semibold">Submitting URL to n8n</h3>
-              <ProcessingSteps currentStep={step} />
-              <p className="text-xs text-muted-foreground">
-                Waiting for ingestion workflow and Supabase sync
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Submitting to n8n</h3>
+              <p className="text-sm text-muted-foreground">
+                Sending URL to ingestion workflow...
               </p>
             </div>
           </div>
@@ -401,56 +358,10 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
           </div>
         </form>
         <p className="text-xs text-muted-foreground mt-3">
-          Supports Greenhouse, Lever, and LinkedIn URLs (best effort for LinkedIn)
+          Supports Greenhouse, Lever, and LinkedIn job URLs
         </p>
       </CardContent>
     </Card>
-  )
-}
-
-function ProcessingSteps({ currentStep }: { currentStep: ProcessingStep }) {
-  const steps = [
-    { key: "fetching", label: "Creating job record" },
-    { key: "reviewing", label: "AI analyzing fit & generating materials" },
-    { key: "preparing", label: "Finalizing resume & cover letter" },
-    { key: "submitting", label: "Submitting URL" },
-    { key: "complete", label: "Job visible in Supabase" },
-  ]
-
-  const currentIndex = steps.findIndex(s => s.key === currentStep)
-
-  return (
-    <div className="space-y-2">
-      {steps.map((step, index) => {
-        const isComplete = index < currentIndex
-        const isCurrent = index === currentIndex
-        const isPending = index > currentIndex
-
-        return (
-          <div 
-            key={step.key}
-            className={`flex items-center gap-3 text-sm transition-opacity ${
-              isPending ? "opacity-40" : "opacity-100"
-            }`}
-          >
-            <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
-              isComplete ? "bg-green-500 text-white" :
-              isCurrent ? "bg-primary text-primary-foreground" :
-              "bg-muted text-muted-foreground"
-            }`}>
-              {isComplete ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : isCurrent ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <span className="text-xs">{index + 1}</span>
-              )}
-            </div>
-            <span className={isCurrent ? "font-medium" : ""}>{step.label}</span>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
