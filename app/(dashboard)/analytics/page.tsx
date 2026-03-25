@@ -13,11 +13,14 @@ export default async function AnalyticsPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Insights
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Analytics</h1>
           <p className="text-muted-foreground">
-            Detailed insights into your job search performance
+            Deep insights into your job search performance.
           </p>
         </div>
         <ErrorState 
@@ -32,11 +35,14 @@ export default async function AnalyticsPage() {
 
   if (allJobs.length === 0) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Insights
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Analytics</h1>
           <p className="text-muted-foreground">
-            Detailed insights into your job search performance
+            Deep insights into your job search performance.
           </p>
         </div>
         <EmptyState 
@@ -49,11 +55,14 @@ export default async function AnalyticsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+    <div className="space-y-8 max-w-6xl">
+      <div className="space-y-2">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          Insights
+        </p>
+        <h1 className="text-3xl font-serif font-medium tracking-tight">Analytics</h1>
         <p className="text-muted-foreground">
-          Detailed insights into your job search performance
+          Deep insights into your job search performance.
         </p>
       </div>
 

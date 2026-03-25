@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -43,7 +42,7 @@ const navigation = [
 ]
 
 const bottomNavigation = [
-  { name: "Your Profile", href: "/profile", icon: User },
+  { name: "Profile", href: "/profile", icon: User },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
@@ -51,25 +50,23 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
-        <Link href="/" className="flex items-center gap-3">
-          <Image
-            src="/hirewire-logo.png"
-            alt="HireWire Logo"
-            width={36}
-            height={36}
-            className="rounded-lg"
-          />
+    <Sidebar className="border-r border-sidebar-border">
+      <SidebarHeader className="px-5 py-6">
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-serif font-semibold text-lg">
+            H
+          </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-lg leading-tight">HireWire</span>
-            <span className="text-[10px] text-muted-foreground tracking-widest uppercase">Jobs Connected</span>
+            <span className="font-semibold text-base tracking-tight">HireWire</span>
+            <span className="text-[10px] text-muted-foreground tracking-[0.15em] uppercase">Job Engine</span>
           </div>
         </Link>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="px-3">
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] font-medium tracking-[0.15em] uppercase text-muted-foreground/70 px-2 mb-2">
+            Pipeline
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navigation.map((item) => {
@@ -77,10 +74,20 @@ export function AppSidebar() {
                   (item.href !== "/" && pathname.startsWith(item.href))
                 return (
                   <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={isActive}
+                      className={cn(
+                        "h-10 px-3 rounded-lg transition-colors",
+                        isActive && "bg-primary/10 text-primary font-medium"
+                      )}
+                    >
                       <Link href={item.href}>
-                        <item.icon className={cn("h-4 w-4", isActive && "text-primary")} />
-                        <span>{item.name}</span>
+                        <item.icon className={cn(
+                          "h-4 w-4",
+                          isActive ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <span className="text-sm">{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -90,16 +97,26 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border">
+      <SidebarFooter className="px-3 pb-4 border-t border-sidebar-border pt-4">
         <SidebarMenu>
           {bottomNavigation.map((item) => {
             const isActive = pathname === item.href
             return (
               <SidebarMenuItem key={item.name}>
-                <SidebarMenuButton asChild isActive={isActive}>
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={isActive}
+                  className={cn(
+                    "h-10 px-3 rounded-lg transition-colors",
+                    isActive && "bg-primary/10 text-primary font-medium"
+                  )}
+                >
                   <Link href={item.href}>
-                    <item.icon className={cn("h-4 w-4", isActive && "text-primary")} />
-                    <span>{item.name}</span>
+                    <item.icon className={cn(
+                      "h-4 w-4",
+                      isActive ? "text-primary" : "text-muted-foreground"
+                    )} />
+                    <span className="text-sm">{item.name}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

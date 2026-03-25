@@ -63,21 +63,24 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-4xl">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Configuration
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            Configure your job review preferences
+            Fine-tune how HireWire processes and scores your jobs.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleReset} disabled={!hasChanges}>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={handleReset} disabled={!hasChanges} className="h-11 px-5">
             Reset
           </Button>
-          <Button onClick={handleSave} disabled={!hasChanges}>
+          <Button onClick={handleSave} disabled={!hasChanges} className="h-11 px-5">
             <Save className="mr-2 h-4 w-4" />
-            Save Changes
+            Save
           </Button>
         </div>
       </div>

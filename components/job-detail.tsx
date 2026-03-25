@@ -3,9 +3,8 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import type { Job, JobStatus } from "@/lib/types"
+import type { Job, JobStatus, STATUS_CONFIG, WORKFLOW_STEPS } from "@/lib/types"
 import { updateJobStatus } from "@/lib/actions/jobs"
-import { generateResume, generateCoverLetter, scoreJob } from "@/lib/actions/ai"
 import { StatusBadge, FitBadge, SourceBadge, ScoreBadge } from "@/components/status-badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,46 +21,59 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   ExternalLink,
-  CheckCircle,
   CheckCircle2,
   Send,
-  XCircle,
   ArrowLeft,
-  ArrowRight,
   Building2,
   Calendar,
   FileText,
   Loader2,
-  Sparkles,
   Copy,
   Mail,
-  Target,
-  RotateCcw,
   AlertCircle,
-  Rocket,
+  Clock,
+  MapPin,
+  DollarSign,
 } from "lucide-react"
 import { toast } from "sonner"
 
+// Canonical statuses from n8n model
 const ALL_STATUSES: JobStatus[] = [
-  "NEW",
-  "SCORED",
-  "READY_TO_APPLY",
-  "APPLIED",
-  "REJECTED",
-  "INTERVIEW",
-  "OFFER",
-  "ARCHIVED",
+  "submitted",
+  "fetching",
+  "parsing",
+  "parsed",
+  "parsed_partial",
+  "duplicate",
+  "scoring",
+  "scored",
+  "below_threshold",
+  "generating_documents",
+  "manual_review_required",
+  "ready",
+  "applied",
+  "interviewing",
+  "offered",
+  "rejected",
+  "declined",
+  "archived",
+  "error",
 ]
 
-// Workflow step definitions
-const WORKFLOW_STEPS = [
-  { status: "NEW", label: "New", description: "Job added" },
-  { status: "SCORED", label: "Scored", description: "AI analyzed" },
-  { status: "READY_TO_APPLY", label: "Ready", description: "Materials ready" },
-  { status: "APPLIED", label: "Applied", description: "Application sent" },
-  { status: "INTERVIEW", label: "Interview", description: "In progress" },
-  { status: "OFFER", label: "Offer", description: "Decision time" },
+// Workflow stages for progress indicator (groups related statuses)
+const WORKFLOW_DISPLAY = [
+  { statuses: ["submitted", "fetching", "parsing"], label: "Submitted" },
+  { statuses: ["parsed", "parsed_partial"], label: "Parsed" },
+  { statuses: ["scoring", "scored", "below_threshold"], label: "Scored" },
+  { statuses: ["generating_documents", "ready", "manual_review_required"], label: "Ready" },
+  { statuses: ["applied", "interviewing", "offered"], label: "Applied" },
 ]
+
+// Helper to find which stage a status belongs to
+function getStageIndex(status: JobStatus): number {
+  const idx = WORKFLOW_DISPLAY.findIndex(stage => stage.statuses.includes(status))
+  return idx >= 0 ? idx : 0
+}
 
 interface JobDetailProps {
   job: Job
@@ -71,37 +83,33 @@ export function JobDetail({ job }: JobDetailProps) {
   const router = useRouter()
   const [status, setStatus] = useState<JobStatus>(job.status)
   const [isPending, startTransition] = useTransition()
-  
-  // AI generation state - initialize with cached values from database
-  const [generatedResume, setGeneratedResume] = useState<string | null>(job.generated_resume || null)
-  const [generatedCoverLetter, setGeneratedCoverLetter] = useState<string | null>(job.generated_cover_letter || null)
-  const [isGeneratingResume, setIsGeneratingResume] = useState(false)
-  const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState(false)
-  const [isScoring, setIsScoring] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [localScore, setLocalScore] = useState(job.score)
-  const [localFit, setLocalFit] = useState(job.fit)
-  const [localStrengths, setLocalStrengths] = useState(job.score_strengths || [])
-  const [localGaps, setLocalGaps] = useState(job.score_gaps || [])
 
   // Computed states
-  const hasResume = !!generatedResume
-  const hasCoverLetter = !!generatedCoverLetter
-  const hasScore = localScore !== null
-  const isReadyToApply = hasResume && hasCoverLetter && hasScore
-  const currentStepIndex = WORKFLOW_STEPS.findIndex(s => s.status === status)
+  const hasResume = !!job.generated_resume
+  const hasCoverLetter = !!job.generated_cover_letter
+  const hasScore = job.score !== null
+  const isReadyToApply = status === "ready" || (hasResume && hasCoverLetter && hasScore)
+  const isProcessing = ["submitted", "fetching", "parsing", "scoring", "generating_documents"].includes(status)
+  const hasError = status === "error"
+  const needsReview = status === "manual_review_required" || status === "parsed_partial"
+  const isBelowThreshold = status === "below_threshold"
+  const isDuplicate = status === "duplicate"
 
   const handleStatusChange = (newStatus: JobStatus) => {
     setStatus(newStatus)
     startTransition(async () => {
       const result = await updateJobStatus(job.id, newStatus)
       if (result.success) {
-        toast.success(`Status updated to ${newStatus.replace(/_/g, " ")}`)
+        toast.success(`Status updated to ${newStatus}`)
       } else {
         toast.error(result.error || "Failed to update status")
         setStatus(job.status)
       }
     })
+  }
+
+  const handleMarkApplied = () => {
+    handleStatusChange("applied")
   }
 
   const handleOpenJob = () => {
@@ -110,99 +118,24 @@ export function JobDetail({ job }: JobDetailProps) {
     }
   }
 
-  // Full auto-process: score + generate all materials
-  const handleFullProcess = async () => {
-    setIsProcessing(true)
-    toast.info("Starting full AI processing...")
-    
-    try {
-      const response = await fetch("/api/jobs/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: job.id }),
+  const handleApplyNow = () => {
+    // Copy resume to clipboard and open job URL
+    if (job.generated_resume) {
+      navigator.clipboard.writeText(job.generated_resume)
+      toast.success("Resume copied to clipboard!")
+    }
+    if (job.source_url) {
+      window.open(job.source_url, "_blank")
+    }
+    // Prompt to mark as applied
+    setTimeout(() => {
+      toast.info("Don't forget to mark as applied when done!", {
+        action: {
+          label: "Mark Applied",
+          onClick: handleMarkApplied,
+        },
       })
-      
-      if (response.ok) {
-        const result = await response.json()
-        setLocalScore(result.score)
-        setLocalFit(result.fit)
-        
-        // Refresh the page to get updated data
-        router.refresh()
-        
-        toast.success("Processing complete!", {
-          description: `Score: ${result.score}/100. Materials generated.`,
-        })
-        
-        // Update local state
-        if (result.score >= 60) {
-          setStatus("READY_TO_APPLY")
-        } else {
-          setStatus("SCORED")
-        }
-      } else {
-        const error = await response.json()
-        toast.error(error.error || "Processing failed")
-      }
-    } catch (error) {
-      toast.error("Failed to process job")
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const handleGenerateResume = async () => {
-    setIsGeneratingResume(true)
-    try {
-      const result = await generateResume(job)
-      if (result.success) {
-        setGeneratedResume(result.resume)
-        toast.success("Resume generated!")
-      } else {
-        toast.error(result.error || "Failed to generate resume")
-      }
-    } catch (error) {
-      toast.error("Failed to generate resume")
-    } finally {
-      setIsGeneratingResume(false)
-    }
-  }
-
-  const handleGenerateCoverLetter = async () => {
-    setIsGeneratingCoverLetter(true)
-    try {
-      const result = await generateCoverLetter(job)
-      if (result.success) {
-        setGeneratedCoverLetter(result.coverLetter)
-        toast.success("Cover letter generated!")
-      } else {
-        toast.error(result.error || "Failed to generate cover letter")
-      }
-    } catch (error) {
-      toast.error("Failed to generate cover letter")
-    } finally {
-      setIsGeneratingCoverLetter(false)
-    }
-  }
-
-  const handleScoreJob = async () => {
-    setIsScoring(true)
-    try {
-      const result = await scoreJob(job)
-      if (result.success) {
-        setLocalScore(result.score)
-        setLocalFit(result.fit)
-        setLocalStrengths(result.strengths)
-        setLocalGaps(result.gaps)
-        toast.success(`Scored: ${result.score}/100 (${result.fit} fit)`)
-      } else {
-        toast.error(result.error || "Failed to score job")
-      }
-    } catch (error) {
-      toast.error("Failed to score job")
-    } finally {
-      setIsScoring(false)
-    }
+    }, 1000)
   }
 
   const copyToClipboard = (text: string, label: string) => {
@@ -210,82 +143,64 @@ export function JobDetail({ job }: JobDetailProps) {
     toast.success(`${label} copied to clipboard!`)
   }
 
-  // One-click apply: Copy materials and open job
-  const handleOneClickApply = () => {
-    // Copy resume to clipboard
-    if (generatedResume) {
-      navigator.clipboard.writeText(generatedResume)
-    }
-    
-    // Open job in new tab
-    if (job.source_url) {
-      window.open(job.source_url, "_blank")
-    }
-    
-    toast.success("Resume copied! Opening job posting...", {
-      description: "Paste your resume in the application form.",
-    })
-  }
-
-  // Mark as applied and record timestamp
-  const handleMarkApplied = () => {
-    handleStatusChange("APPLIED")
-  }
+  // Get current step index for progress using the helper
+  const progressIndex = getStageIndex(status)
 
   return (
-    <div className="space-y-6">
-      {/* Back Button */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" asChild>
+    <div className="space-y-8 max-w-5xl">
+      {/* Back button */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground" asChild>
           <Link href="/jobs">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Jobs
           </Link>
         </Button>
-        
-        {/* Quick Status Indicator */}
-        <div className="flex items-center gap-2">
-          {isReadyToApply && status !== "APPLIED" && (
-            <Badge variant="default" className="bg-emerald-500">
-              <CheckCircle2 className="mr-1 h-3 w-3" />
-              Ready to Apply
-            </Badge>
-          )}
-          <StatusBadge status={status} />
-        </div>
       </div>
 
-      {/* Workflow Progress Bar */}
+      {/* Workflow Progress */}
       <Card>
-        <CardContent className="py-4">
+        <CardContent className="pt-6">
           <div className="flex items-center justify-between">
-            {WORKFLOW_STEPS.map((step, index) => {
-              const isComplete = index < currentStepIndex
-              const isCurrent = index === currentStepIndex
-              const isPending = index > currentStepIndex
-              
+            {WORKFLOW_DISPLAY.map((step, index) => {
+              const isComplete = index < progressIndex
+              const isCurrent = index === progressIndex
+              const isPast = index <= progressIndex
+
               return (
-                <div key={step.status} className="flex items-center">
-                  <div className="flex flex-col items-center">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium ${
-                      isComplete ? "bg-emerald-500 text-white" :
-                      isCurrent ? "bg-primary text-primary-foreground" :
-                      "bg-muted text-muted-foreground"
-                    }`}>
+                <div key={step.label} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center flex-1">
+                    <div
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                        isComplete
+                          ? "bg-green-500 border-green-500 text-white"
+                          : isCurrent
+                          ? "bg-primary border-primary text-primary-foreground"
+                          : "bg-muted border-muted-foreground/30 text-muted-foreground"
+                      }`}
+                    >
                       {isComplete ? (
                         <CheckCircle2 className="h-4 w-4" />
+                      ) : isCurrent && isProcessing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        index + 1
+                        <span className="text-xs font-medium">{index + 1}</span>
                       )}
                     </div>
-                    <span className={`text-xs mt-1 ${isCurrent ? "font-medium" : "text-muted-foreground"}`}>
+                    <span
+                      className={`mt-1 text-xs ${
+                        isPast ? "font-medium" : "text-muted-foreground"
+                      }`}
+                    >
                       {step.label}
                     </span>
                   </div>
-                  {index < WORKFLOW_STEPS.length - 1 && (
-                    <div className={`h-0.5 w-8 mx-2 ${
-                      isComplete ? "bg-emerald-500" : "bg-muted"
-                    }`} />
+                  {index < WORKFLOW_DISPLAY.length - 1 && (
+                    <div
+                      className={`h-0.5 flex-1 mx-2 ${
+                        index < progressIndex ? "bg-green-500" : "bg-muted"
+                      }`}
+                    />
                   )}
                 </div>
               )
@@ -294,126 +209,152 @@ export function JobDetail({ job }: JobDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Action Banner - Context-aware CTA */}
-      {status === "NEW" && (
-        <Card className="border-blue-500/30 bg-blue-500/5">
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-5 w-5 text-blue-500" />
+      {/* Error Banner */}
+      {hasError && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
               <div>
-                <p className="font-medium">Process this job with AI</p>
-                <p className="text-sm text-muted-foreground">
-                  Score fit, generate resume and cover letter in one click
+                <h4 className="font-medium text-destructive">Processing Error</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {job.error_message || "An error occurred during processing."}
                 </p>
-              </div>
-            </div>
-            <Button onClick={handleFullProcess} disabled={isProcessing}>
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Process Now
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {(status === "SCORED" || status === "READY_TO_APPLY") && !hasResume && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-500" />
-              <div>
-                <p className="font-medium">Materials needed</p>
-                <p className="text-sm text-muted-foreground">
-                  Generate resume and cover letter to apply
-                </p>
-              </div>
-            </div>
-            <Button onClick={handleFullProcess} disabled={isProcessing}>
-              {isProcessing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              Generate Materials
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {isReadyToApply && status !== "APPLIED" && (
-        <Card className="border-emerald-500/30 bg-emerald-500/5">
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <Rocket className="h-5 w-5 text-emerald-500" />
-              <div>
-                <p className="font-medium">Ready to apply!</p>
-                <p className="text-sm text-muted-foreground">
-                  Resume and cover letter are ready. Click to copy and open job posting.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleOneClickApply}>
-                <Copy className="mr-2 h-4 w-4" />
-                Copy & Open
-              </Button>
-              <Button onClick={handleMarkApplied} disabled={isPending}>
-                {isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" />
+                {job.error_step && (
+                  <p className="text-xs text-muted-foreground mt-1">Failed at: {job.error_step}</p>
                 )}
-                Mark Applied
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Duplicate Banner */}
+      {isDuplicate && (
+        <Card className="border-gray-500/50 bg-gray-500/5">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-gray-500 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-gray-600">Duplicate Job</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This job appears to be a duplicate of an existing entry.
+                </p>
+                {job.duplicate_of_job_id && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    See original: {job.duplicate_of_job_id}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Manual Review Required Banner */}
+      {needsReview && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-amber-600">Manual Review Required</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {status === "parsed_partial" 
+                    ? "Some job details could not be extracted automatically."
+                    : "This job requires manual review before proceeding."}
+                </p>
+                {job.parse_missing_fields && job.parse_missing_fields.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Missing: {job.parse_missing_fields.join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Below Threshold Banner */}
+      {isBelowThreshold && (
+        <Card className="border-orange-500/50 bg-orange-500/5">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-orange-500 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-orange-600">Below Apply Threshold</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This job scored below your configured apply threshold. 
+                  Review the scoring details to decide if you want to apply anyway.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Ready to Apply Banner */}
+      {isReadyToApply && status !== "applied" && !needsReview && !isBelowThreshold && (
+        <Card className="border-green-500/50 bg-green-500/5">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <div>
+                  <h4 className="font-medium">Ready to Apply</h4>
+                  <p className="text-sm text-muted-foreground">
+                    All materials are ready. Click to apply!
+                  </p>
+                </div>
+              </div>
+              <Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90 h-11 px-6">
+                <Send className="mr-2 h-4 w-4" />
+                Apply Now
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="space-y-6">
-          {/* Header */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Job Header */}
           <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <CardTitle className="text-2xl">{job.title}</CardTitle>
-                  <CardDescription className="flex items-center gap-2 text-base">
-                    <Building2 className="h-4 w-4" />
+            <CardHeader className="pb-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium tracking-[0.15em] uppercase text-muted-foreground">
                     {job.company}
-                  </CardDescription>
+                  </p>
+                  <CardTitle className="text-2xl font-serif font-medium tracking-tight">
+                    {job.title}
+                  </CardTitle>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-2">
                   <SourceBadge source={job.source} />
-                  <FitBadge fit={localFit || "UNSCORED"} />
+                  {!hasScore && <Badge variant="outline" className="text-xs">Unscored</Badge>}
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Score:</span>
-                  <span className="text-lg"><ScoreBadge score={localScore} /></span>
-                </div>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  {new Date(job.created_at).toLocaleDateString()}
-                </div>
-                {job.source_url && (
-                  <Button variant="link" size="sm" className="h-auto p-0" onClick={handleOpenJob}>
-                    <ExternalLink className="mr-1 h-3 w-3" />
-                    View Original
-                  </Button>
+              <div className="flex flex-wrap gap-4 text-sm">
+                {job.location && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    <span>{job.location}</span>
+                  </div>
                 )}
+                {job.salary_range && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <DollarSign className="h-4 w-4" />
+                    <span>{job.salary_range}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  <span>{new Date(job.created_at).toLocaleDateString()}</span>
+                </div>
               </div>
 
               <Separator className="my-4" />
@@ -421,44 +362,31 @@ export function JobDetail({ job }: JobDetailProps) {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Status:</span>
-                  <Select 
-                    value={status} 
-                    onValueChange={(v) => handleStatusChange(v as JobStatus)}
-                    disabled={isPending}
-                  >
-                    <SelectTrigger className="w-[180px]">
+                  <Select value={status} onValueChange={handleStatusChange} disabled={isPending}>
+                    <SelectTrigger className="w-36">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {ALL_STATUSES.map((s) => (
                         <SelectItem key={s} value={s}>
-                          {s.replace(/_/g, " ")}
+                          {s}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 </div>
+                <FitBadge fit={job.fit} />
               </div>
             </CardContent>
           </Card>
 
           {/* Tabs */}
-          <Tabs defaultValue={hasResume ? "resume" : "description"} className="space-y-4">
+          <Tabs defaultValue="description" className="space-y-4">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="description">Description</TabsTrigger>
-              <TabsTrigger value="scoring" className="relative">
-                Scoring
-                {hasScore && <span className="absolute -top-1 -right-1 h-2 w-2 bg-emerald-500 rounded-full" />}
-              </TabsTrigger>
-              <TabsTrigger value="resume" className="relative">
-                Resume
-                {hasResume && <span className="absolute -top-1 -right-1 h-2 w-2 bg-emerald-500 rounded-full" />}
-              </TabsTrigger>
-              <TabsTrigger value="cover" className="relative">
-                Cover Letter
-                {hasCoverLetter && <span className="absolute -top-1 -right-1 h-2 w-2 bg-emerald-500 rounded-full" />}
-              </TabsTrigger>
+              <TabsTrigger value="scoring">Scoring</TabsTrigger>
+              <TabsTrigger value="resume">Resume</TabsTrigger>
+              <TabsTrigger value="cover">Cover Letter</TabsTrigger>
             </TabsList>
 
             <TabsContent value="description">
@@ -467,19 +395,19 @@ export function JobDetail({ job }: JobDetailProps) {
                   <CardTitle>Job Description</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[500px] pr-4">
-                    {job.raw_description ? (
-                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {job.raw_description ? (
+                    <ScrollArea className="h-[400px] pr-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
                         {job.raw_description}
                       </div>
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No description available for this job.</p>
-                        <p className="text-sm mt-2">The description may be fetched when processing.</p>
-                      </div>
-                    )}
-                  </ScrollArea>
+                    </ScrollArea>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No description available yet.</p>
+                      <p className="text-sm">n8n will populate this after parsing.</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -487,93 +415,64 @@ export function JobDetail({ job }: JobDetailProps) {
             <TabsContent value="scoring">
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Scoring Analysis</CardTitle>
-                      <CardDescription>AI-generated fit assessment</CardDescription>
-                    </div>
-                    {!hasScore && (
-                      <Button onClick={handleScoreJob} disabled={isScoring}>
-                        {isScoring ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Target className="mr-2 h-4 w-4" />
-                        )}
-                        Score Now
-                      </Button>
-                    )}
-                  </div>
+                  <CardTitle>Scoring Analysis</CardTitle>
+                  <CardDescription>AI-generated fit assessment from n8n</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent>
                   {hasScore ? (
-                    <>
-                      <div className="flex items-center gap-4">
-                        <div className="text-4xl font-bold">{localScore}</div>
-                        <div>
-                          <p className="font-medium">Fit Score</p>
-                          <p className="text-sm text-muted-foreground">out of 100</p>
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-6">
+                        <div className="text-center">
+                          <div className="text-4xl font-bold">
+                            <ScoreBadge score={job.score} />
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">out of 100</p>
                         </div>
-                        <FitBadge fit={localFit || "MEDIUM"} />
+                        <div>
+                          <FitBadge fit={job.fit} />
+                          {job.scored_at && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Scored {new Date(job.scored_at).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
-                      {localStrengths && localStrengths.length > 0 && (
+                      {job.score_strengths && job.score_strengths.length > 0 && (
                         <div>
-                          <h4 className="font-medium mb-2 flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-emerald-500" />
-                            Strengths
-                          </h4>
-                          <ul className="space-y-2">
-                            {localStrengths.map((strength, idx) => (
-                              <li key={idx} className="flex items-start gap-2 text-sm">
-                                <CheckCircle className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                                {strength}
+                          <h4 className="font-medium mb-2 text-green-600">Strengths</h4>
+                          <ul className="space-y-1">
+                            {job.score_strengths.map((s, i) => (
+                              <li key={i} className="text-sm flex items-start gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                {s}
                               </li>
                             ))}
                           </ul>
                         </div>
                       )}
 
-                      {localGaps && localGaps.length > 0 && (
+                      {job.score_gaps && job.score_gaps.length > 0 && (
                         <div>
-                          <h4 className="font-medium mb-2 flex items-center gap-2">
-                            <XCircle className="h-4 w-4 text-amber-500" />
-                            Gaps to Address
-                          </h4>
-                          <ul className="space-y-2">
-                            {localGaps.map((gap, idx) => (
-                              <li key={idx} className="flex items-start gap-2 text-sm">
-                                <XCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                                {gap}
+                          <h4 className="font-medium mb-2 text-amber-600">Gaps</h4>
+                          <ul className="space-y-1">
+                            {job.score_gaps.map((g, i) => (
+                              <li key={i} className="text-sm flex items-start gap-2">
+                                <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                                {g}
                               </li>
                             ))}
                           </ul>
                         </div>
                       )}
-
-                      <Button variant="outline" size="sm" onClick={handleScoreJob} disabled={isScoring}>
-                        <RotateCcw className="mr-2 h-4 w-4" />
-                        Re-score
-                      </Button>
-                    </>
+                    </div>
                   ) : (
                     <div className="text-center py-8">
-                      <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <p className="text-muted-foreground mb-4">
-                        Score this job to see how well it matches your profile
+                      <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                      <p className="text-muted-foreground">Pending Score</p>
+                      <p className="text-sm text-muted-foreground">
+                        n8n workflow will score this job automatically.
                       </p>
-                      <Button onClick={handleScoreJob} disabled={isScoring}>
-                        {isScoring ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Analyzing...
-                          </>
-                        ) : (
-                          <>
-                            <Target className="mr-2 h-4 w-4" />
-                            Score Job Fit
-                          </>
-                        )}
-                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -585,58 +484,35 @@ export function JobDetail({ job }: JobDetailProps) {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Generated Resume</CardTitle>
-                      <CardDescription>AI-tailored resume for this position</CardDescription>
+                      <CardTitle>Tailored Resume</CardTitle>
+                      <CardDescription>Generated by n8n workflow</CardDescription>
                     </div>
                     {hasResume && (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => copyToClipboard(generatedResume!, "Resume")}
-                        >
-                          <Copy className="mr-2 h-4 w-4" />
-                          Copy
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleGenerateResume}
-                          disabled={isGeneratingResume}
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                          Regenerate
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(job.generated_resume!, "Resume")}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy
+                      </Button>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent>
                   {hasResume ? (
-                    <ScrollArea className="h-[500px] pr-4">
+                    <ScrollArea className="h-[400px] pr-4">
                       <pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-lg">
-                        {generatedResume}
+                        {job.generated_resume}
                       </pre>
                     </ScrollArea>
                   ) : (
-                    <div className="text-center py-12">
+                    <div className="text-center py-8">
                       <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <p className="text-muted-foreground mb-4">
-                        Generate a tailored resume for this job
+                      <p className="text-muted-foreground">No resume generated yet.</p>
+                      <p className="text-sm text-muted-foreground">
+                        n8n will generate this after scoring.
                       </p>
-                      <Button onClick={handleGenerateResume} disabled={isGeneratingResume}>
-                        {isGeneratingResume ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="mr-2 h-4 w-4" />
-                            Generate Resume
-                          </>
-                        )}
-                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -648,58 +524,35 @@ export function JobDetail({ job }: JobDetailProps) {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Generated Cover Letter</CardTitle>
-                      <CardDescription>Personalized cover letter for this application</CardDescription>
+                      <CardTitle>Cover Letter</CardTitle>
+                      <CardDescription>Personalized for this application</CardDescription>
                     </div>
                     {hasCoverLetter && (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => copyToClipboard(generatedCoverLetter!, "Cover Letter")}
-                        >
-                          <Copy className="mr-2 h-4 w-4" />
-                          Copy
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleGenerateCoverLetter}
-                          disabled={isGeneratingCoverLetter}
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                          Regenerate
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(job.generated_cover_letter!, "Cover letter")}
+                      >
+                        <Copy className="mr-2 h-4 w-4" />
+                        Copy
+                      </Button>
                     )}
                   </div>
                 </CardHeader>
                 <CardContent>
                   {hasCoverLetter ? (
-                    <ScrollArea className="h-[500px] pr-4">
+                    <ScrollArea className="h-[400px] pr-4">
                       <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {generatedCoverLetter}
+                        {job.generated_cover_letter}
                       </div>
                     </ScrollArea>
                   ) : (
-                    <div className="text-center py-12">
+                    <div className="text-center py-8">
                       <Mail className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <p className="text-muted-foreground mb-4">
-                        Generate a personalized cover letter
+                      <p className="text-muted-foreground">No cover letter generated yet.</p>
+                      <p className="text-sm text-muted-foreground">
+                        n8n will generate this after scoring.
                       </p>
-                      <Button onClick={handleGenerateCoverLetter} disabled={isGeneratingCoverLetter}>
-                        {isGeneratingCoverLetter ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="mr-2 h-4 w-4" />
-                            Generate Cover Letter
-                          </>
-                        )}
-                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -708,89 +561,33 @@ export function JobDetail({ job }: JobDetailProps) {
           </Tabs>
         </div>
 
-        {/* Right Panel - Actions & Status */}
-        <div className="space-y-4">
-          {/* Quick Actions */}
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Score Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
+              <CardTitle className="text-lg">Fit Score</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center">
+                <div className="text-5xl font-bold mb-2">
+                  <ScoreBadge score={job.score} />
+                </div>
+                <FitBadge fit={job.fit} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Primary CTA based on state */}
-              {status === "NEW" && (
-                <Button
-                  className="w-full"
-                  onClick={handleFullProcess}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  Process with AI
-                </Button>
-              )}
-
-              {isReadyToApply && status !== "APPLIED" && (
-                <>
-                  <Button className="w-full" onClick={handleOneClickApply}>
-                    <Rocket className="mr-2 h-4 w-4" />
-                    Apply Now
-                  </Button>
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={handleMarkApplied}
-                    disabled={isPending}
-                  >
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Mark as Applied
-                  </Button>
-                </>
-              )}
-
-              {status === "APPLIED" && (
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => handleStatusChange("INTERVIEW")}
-                  disabled={isPending}
-                >
-                  <ArrowRight className="mr-2 h-4 w-4" />
-                  Got Interview
-                </Button>
-              )}
-
-              <Separator />
-
-              {/* Secondary actions */}
               {job.source_url && (
-                <Button className="w-full justify-start" variant="ghost" onClick={handleOpenJob}>
+                <Button className="w-full justify-start" variant="outline" onClick={handleOpenJob}>
                   <ExternalLink className="mr-2 h-4 w-4" />
-                  Open Original Posting
-                </Button>
-              )}
-
-              {hasResume && (
-                <Button
-                  className="w-full justify-start"
-                  variant="ghost"
-                  onClick={() => copyToClipboard(generatedResume!, "Resume")}
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy Resume
-                </Button>
-              )}
-
-              {hasCoverLetter && (
-                <Button
-                  className="w-full justify-start"
-                  variant="ghost"
-                  onClick={() => copyToClipboard(generatedCoverLetter!, "Cover Letter")}
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy Cover Letter
+                  View Original Posting
                 </Button>
               )}
 
@@ -798,66 +595,46 @@ export function JobDetail({ job }: JobDetailProps) {
 
               <Button
                 className="w-full justify-start"
-                variant="ghost"
-                onClick={() => handleStatusChange("ARCHIVED")}
+                variant={status === "applied" ? "secondary" : "default"}
+                onClick={handleMarkApplied}
+                disabled={status === "applied" || isPending}
               >
-                <XCircle className="mr-2 h-4 w-4" />
-                Archive Job
+                {isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                {status === "applied" ? "Already Applied" : "Mark Applied"}
               </Button>
-            </CardContent>
-          </Card>
 
-          {/* Checklist */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Application Checklist</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex items-center gap-2 text-sm">
-                {hasScore ? (
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground" />
-                )}
-                <span className={hasScore ? "" : "text-muted-foreground"}>Job scored</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                {hasResume ? (
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground" />
-                )}
-                <span className={hasResume ? "" : "text-muted-foreground"}>Resume generated</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                {hasCoverLetter ? (
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground" />
-                )}
-                <span className={hasCoverLetter ? "" : "text-muted-foreground"}>Cover letter generated</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                {status === "APPLIED" || status === "INTERVIEW" || status === "OFFER" ? (
-                  <CheckCircle className="h-4 w-4 text-emerald-500" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground" />
-                )}
-                <span className={status === "APPLIED" ? "" : "text-muted-foreground"}>Application submitted</span>
-              </div>
+              {isReadyToApply && status !== "applied" && (
+                <Button
+                  className="w-full justify-start bg-green-600 hover:bg-green-700"
+                  onClick={handleApplyNow}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  Apply Now
+                </Button>
+              )}
             </CardContent>
           </Card>
 
           {/* Timestamps */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Timeline</CardTitle>
+              <CardTitle className="text-lg">Timeline</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Added</span>
+                <span className="text-muted-foreground">Created</span>
                 <span>{new Date(job.created_at).toLocaleDateString()}</span>
               </div>
+              {job.parsed_at && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Parsed</span>
+                  <span>{new Date(job.parsed_at).toLocaleDateString()}</span>
+                </div>
+              )}
               {job.scored_at && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Scored</span>

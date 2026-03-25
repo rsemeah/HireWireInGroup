@@ -97,42 +97,35 @@ export async function createJobFromUrl(url: string): Promise<CreateJobResult> {
       return { success: false, error: "Please provide a job URL." }
     }
 
+    let parsedUrl: URL
     try {
-      new URL(normalizedUrl)
+      parsedUrl = new URL(normalizedUrl)
     } catch {
       return { success: false, error: "Please provide a valid URL." }
     }
 
-    const sourceHint = getSourceHint(normalizedUrl)
-    if (!sourceHint) {
-      return {
-        success: false,
-        error: "Only Greenhouse, Lever, and LinkedIn URLs are supported right now.",
-      }
+    // Only validate URL uses http/https protocol
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return { success: false, error: "URL must use http or https protocol." }
     }
 
-    const webhookUrl = process.env.N8N_JOB_INTAKE_WEBHOOK_URL
-    if (!webhookUrl) {
-      return {
-        success: false,
-        error: "Job intake webhook is not configured. Set N8N_JOB_INTAKE_WEBHOOK_URL.",
-      }
-    }
+    // Generate request_id for tracing through the pipeline
+    const requestId = crypto.randomUUID()
 
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    }
-
-    if (process.env.N8N_JOB_INTAKE_WEBHOOK_TOKEN) {
-      headers["x-webhook-token"] = process.env.N8N_JOB_INTAKE_WEBHOOK_TOKEN
-    }
+    // Use environment variable or fallback to the live n8n webhook
+    const webhookUrl = process.env.N8N_JOB_INTAKE_WEBHOOK_URL || 
+      "https://redlanternstudios.app.n8n.cloud/webhook-test/job-intake"
 
     const webhookRes = await fetch(webhookUrl, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        url: normalizedUrl,
-        source_hint: sourceHint,
+        jobUrl: normalizedUrl,
+        source: "hirewire",
+        submittedAt: new Date().toISOString(),
+        requestId: requestId,
       }),
       cache: "no-store",
     })
@@ -270,7 +263,7 @@ export async function getJobStats(): Promise<StatsResult> {
     const jobs = data || []
 
     const byStatus = jobs.reduce((acc, job) => {
-      const currentStatus = job.status || "NEW"
+      const currentStatus = job.status || "submitted"
       acc[currentStatus] = (acc[currentStatus] || 0) + 1
       return acc
     }, {} as Record<string, number>)

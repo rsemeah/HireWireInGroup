@@ -17,11 +17,14 @@ export default async function CompaniesPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Companies</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Directory
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Companies</h1>
           <p className="text-muted-foreground">
-            Overview of companies you have applied to or are tracking
+            All companies in your pipeline, organized and trackable.
           </p>
         </div>
         <ErrorState 
@@ -48,7 +51,7 @@ export default async function CompaniesPage() {
     }
     acc[company].jobs.push(job)
     acc[company].totalJobs++
-    if (job.status === "APPLIED" || job.status === "INTERVIEW" || job.status === "OFFER") {
+    if (job.status === "applied" || job.status === "interviewing" || job.status === "offered") {
       acc[company].appliedJobs++
     }
     return acc
@@ -67,11 +70,14 @@ export default async function CompaniesPage() {
   const companies = Object.values(companiesMap).sort((a, b) => b.totalJobs - a.totalJobs)
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Companies</h1>
+    <div className="space-y-8 max-w-6xl">
+      <div className="space-y-2">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          Directory
+        </p>
+        <h1 className="text-3xl font-serif font-medium tracking-tight">Companies</h1>
         <p className="text-muted-foreground">
-          Overview of companies you have applied to or are tracking
+          All companies in your pipeline, organized and trackable.
         </p>
       </div>
 

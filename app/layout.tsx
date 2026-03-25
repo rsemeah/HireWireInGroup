@@ -1,16 +1,28 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Inter, Playfair_Display, JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const inter = Inter({ 
+  subsets: ["latin"],
+  variable: '--font-inter',
+})
+
+const playfair = Playfair_Display({ 
+  subsets: ["latin"],
+  variable: '--font-playfair',
+})
+
+const jetbrains = JetBrains_Mono({ 
+  subsets: ["latin"],
+  variable: '--font-jetbrains',
+})
 
 export const metadata: Metadata = {
-  title: 'HireWire 1.0 - AI Job Application Engine',
-  description: 'Internal dashboard for managing AI-powered job applications',
+  title: 'HireWire - Your Job Search, Refined',
+  description: 'A premium job application engine that scores opportunities, generates tailored materials, and tracks your pipeline.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -37,12 +49,12 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${playfair.variable} ${jetbrains.variable}`}>
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
+          enableSystem={false}
           disableTransitionOnChange
         >
           {children}

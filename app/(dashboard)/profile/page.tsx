@@ -214,28 +214,31 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-4xl">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Your Profile</h1>
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Settings
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Your Profile</h1>
           <p className="text-muted-foreground">
-            This information is used to generate tailored resumes and cover letters
+            Your profile powers AI-generated resumes and cover letters.
           </p>
         </div>
         <div className="flex items-center gap-4">
           {profileStatus === "complete" ? (
-            <Badge variant="default" className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30">
-              <CheckCircle className="mr-1 h-3 w-3" />
-              Profile Complete
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+              <CheckCircle className="mr-1.5 h-3 w-3" />
+              Complete
             </Badge>
           ) : (
-            <Badge variant="secondary" className="bg-amber-500/20 text-amber-600 border-amber-500/30">
-              <AlertCircle className="mr-1 h-3 w-3" />
-              Profile Incomplete
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+              <AlertCircle className="mr-1.5 h-3 w-3" />
+              Incomplete
             </Badge>
           )}
-          <Button onClick={saveProfile} disabled={!hasChanges || isSaving}>
+          <Button onClick={saveProfile} disabled={!hasChanges || isSaving} className="h-11 px-5">
             {isSaving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (

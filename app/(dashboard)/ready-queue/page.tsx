@@ -25,11 +25,14 @@ export default async function ReadyQueuePage() {
 
   if (!result.success) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ready to Apply</h1>
+      <div className="space-y-8 max-w-6xl">
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Action Required
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Ready to Apply</h1>
           <p className="text-muted-foreground">
-            Jobs that scored well and are ready for your application
+            High-fit jobs with tailored materials. Ready when you are.
           </p>
         </div>
         <ErrorState 
@@ -40,12 +43,13 @@ export default async function ReadyQueuePage() {
     )
   }
 
-  // Filter for jobs that are READY_TO_APPLY and have materials
+  // Filter for jobs that are ready to apply (using canonical statuses)
   const readyJobs = result.data.filter(job => 
-    (job.status === "READY_TO_APPLY" || 
+    (job.status === "ready" || 
+     job.status === "manual_review_required" ||
      (job.fit === "HIGH" && job.score !== null && job.score >= 60)) &&
-    job.status !== "APPLIED" &&
-    job.status !== "ARCHIVED"
+    job.status !== "applied" &&
+    job.status !== "archived"
   ).sort((a, b) => (b.score || 0) - (a.score || 0))
 
   // Jobs with complete materials
@@ -53,10 +57,13 @@ export default async function ReadyQueuePage() {
   const incompleteJobs = readyJobs.filter(job => !job.generated_resume || !job.generated_cover_letter)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-6xl">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ready to Apply</h1>
+        <div className="space-y-2">
+          <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+            Action Required
+          </p>
+          <h1 className="text-3xl font-serif font-medium tracking-tight">Ready to Apply</h1>
           <p className="text-muted-foreground">
             Jobs with materials ready - just click to apply
           </p>

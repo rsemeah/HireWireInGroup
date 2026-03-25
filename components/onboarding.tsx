@@ -16,7 +16,11 @@ import {
   ArrowRight,
   ExternalLink,
   Briefcase,
-  ListChecks
+  ListChecks,
+  AlertTriangle,
+  Zap,
+  Target,
+  Sparkles
 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -25,25 +29,31 @@ import type { Job } from "@/lib/types"
 
 export function HeroSection() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to HireWire</h1>
-        <p className="text-muted-foreground mt-1 max-w-2xl">
-          Review jobs, decide if they are worth applying to, and get tailored application materials.
+    <div className="space-y-6 pb-2">
+      <div className="space-y-3">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground">
+          Job Search Engine
+        </p>
+        <h1 className="text-4xl md:text-5xl font-serif font-medium tracking-tight leading-[1.1]">
+          Know before you apply.
+        </h1>
+        <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
+          HireWire scores every job against your profile, generates tailored materials, 
+          and keeps your pipeline organized. No more guesswork.
         </p>
       </div>
       
-      <div className="flex flex-wrap gap-3">
-        <Button size="lg" asChild>
+      <div className="flex flex-wrap gap-4 pt-2">
+        <Button size="lg" className="h-12 px-6 text-base font-medium" asChild>
           <a href="#review-job">
-            <Search className="mr-2 h-4 w-4" />
+            <Zap className="mr-2 h-4 w-4" />
             Review a Job
           </a>
         </Button>
-        <Button variant="outline" size="lg" asChild>
+        <Button variant="outline" size="lg" className="h-12 px-6 text-base font-medium" asChild>
           <Link href="/manual-entry">
             <PlusCircle className="mr-2 h-4 w-4" />
-            Add Job Manually
+            Add Manually
           </Link>
         </Button>
       </div>
@@ -53,29 +63,31 @@ export function HeroSection() {
 
 export function WorkflowSteps() {
   const steps = [
-    { label: "Add Job", icon: PlusCircle },
-    { label: "Review", icon: Search },
-    { label: "Decide", icon: ThumbsUp },
-    { label: "Prepare", icon: FileText },
-    { label: "Apply", icon: ArrowRight },
-    { label: "Track", icon: CheckCircle2 },
+    { label: "Submit", description: "Paste URL" },
+    { label: "Score", description: "AI analysis" },
+    { label: "Generate", description: "Tailored docs" },
+    { label: "Apply", description: "One click" },
+    { label: "Track", description: "Full visibility" },
   ]
 
   return (
-    <div className="flex items-center justify-center gap-1 py-4 overflow-x-auto">
-      {steps.map((step, index) => (
-        <div key={index} className="flex items-center">
-          <div className="flex flex-col items-center gap-1 px-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-              <step.icon className="h-4 w-4 text-muted-foreground" />
+    <div className="py-8 border-y border-border">
+      <div className="flex items-center justify-between gap-2 max-w-3xl mx-auto">
+        {steps.map((step, index) => (
+          <div key={index} className="flex items-center flex-1">
+            <div className="flex flex-col items-center text-center flex-1">
+              <span className="text-xs font-medium tracking-wide uppercase text-primary">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <span className="text-sm font-semibold mt-1">{step.label}</span>
+              <span className="text-xs text-muted-foreground">{step.description}</span>
             </div>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{step.label}</span>
+            {index < steps.length - 1 && (
+              <div className="w-8 h-px bg-border flex-shrink-0" />
+            )}
           </div>
-          {index < steps.length - 1 && (
-            <ArrowRight className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
 }
@@ -84,53 +96,60 @@ export function HowItWorks() {
   const steps = [
     {
       icon: Link2,
-      title: "Paste a job URL",
-      description: "Drop in a link from Greenhouse, Lever, or any job posting",
+      number: "01",
+      title: "Drop the link",
+      description: "Paste any job URL. Greenhouse, Lever, LinkedIn—we handle the parsing.",
     },
     {
-      icon: Search,
-      title: "HireWire reviews the role",
-      description: "AI analyzes the job against your background and preferences",
+      icon: Target,
+      number: "02", 
+      title: "Get your score",
+      description: "AI analyzes the role against your profile. Strengths highlighted, gaps identified.",
     },
     {
-      icon: ThumbsUp,
-      title: "See a go or no-go decision",
-      description: "Get a clear fit score with strengths and gaps identified",
+      icon: Sparkles,
+      number: "03",
+      title: "Materials, generated",
+      description: "Resume and cover letter tailored to this specific role. Ready to submit.",
     },
     {
-      icon: FileText,
-      title: "View tailored application materials",
-      description: "Resume highlights and cover letter customized for this role",
-    },
-    {
-      icon: CheckCircle2,
-      title: "Track your application status",
-      description: "Monitor progress from review to interview to offer",
+      icon: ArrowRight,
+      number: "04",
+      title: "Apply with confidence",
+      description: "One-click submission tracking. Know exactly where you stand, always.",
     },
   ]
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-lg">How HireWire Works</CardTitle>
-        <CardDescription>Five simple steps from job posting to application</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 sm:grid-cols-5">
-          {steps.map((step, index) => (
-            <div key={index} className="flex flex-col items-center text-center space-y-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <step.icon className="h-5 w-5 text-primary" />
+    <div className="py-12">
+      <div className="mb-8">
+        <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground mb-2">
+          The Process
+        </p>
+        <h2 className="text-2xl font-serif font-medium">Four steps to better applications</h2>
+      </div>
+      
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {steps.map((step, index) => (
+          <div key={index} className="group">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary border border-border transition-colors group-hover:border-primary/20">
+                  <step.icon className="h-5 w-5 text-foreground/70" />
+                </div>
+                <span className="text-xs font-medium tracking-wider text-muted-foreground/60">
+                  {step.number}
+                </span>
               </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium leading-tight">{step.title}</p>
-                <p className="text-xs text-muted-foreground leading-snug">{step.description}</p>
+              <div className="space-y-2">
+                <h3 className="text-base font-semibold">{step.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{step.description}</p>
               </div>
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -162,7 +181,6 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
       return
     }
 
-    // Basic URL validation
     try {
       new URL(url)
     } catch {
@@ -171,7 +189,7 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     }
 
     setStep("submitting")
-    toast.info("Submitting URL to ingestion workflow...")
+    toast.info("Processing...")
 
     const result = await createJobFromUrl(url)
 
@@ -183,74 +201,31 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     }
 
     setCreatedJob(result.job)
-    
-    // Step 2: Full-auto AI processing
-    setStep("reviewing")
-    
-    try {
-      const processResponse = await fetch("/api/jobs/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId: result.job.id }),
-      })
-      
-      if (processResponse.ok) {
-        const processResult = await processResponse.json()
-        
-        // Step 3: Processing complete
-        setStep("preparing")
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        // Step 4: Complete with details
-        setStep("complete")
-        
-        if (processResult.score >= 60) {
-          toast.success("Job is ready to apply!", {
-            description: `Score: ${processResult.score}/100 (${processResult.fit} fit). Resume generated.`,
-          })
-        } else {
-          toast.success("Job analyzed!", {
-            description: `Score: ${processResult.score}/100. Review details to decide.`,
-          })
-        }
-      } else {
-        // Processing failed but job was created
-        setStep("complete")
-        toast.info("Job added - processing will continue in background", {
-          description: "View the job to see details.",
-        })
-      }
-    } catch (processError) {
-      // Processing failed but job was created
-      console.error("Process error:", processError)
-      setStep("complete")
-      toast.info("Job added", {
-        description: "Manual review may be needed.",
     setIsDuplicate(result.duplicate)
     setIsPartialParse(result.partialParse)
     setSubmissionMessage(result.message || null)
     setStep("complete")
 
     if (result.duplicate) {
-      toast.warning("This job already exists", {
-        description: "We linked you to the existing record instead of creating a duplicate.",
+      toast.warning("Already in your pipeline", {
+        description: "Linked to existing record.",
       })
     } else {
-      toast.success("Job submitted successfully", {
-        description: "The job was sent to n8n for parsing and scoring.",
+      toast.success("Job added to pipeline", {
+        description: "AI processing in background.",
       })
     }
 
     if (result.partialParse) {
-      toast.warning("Job was partially parsed", {
-        description: "Scoring and resume generation may be limited until details are completed.",
+      toast.warning("Partial data extracted", {
+        description: "Some fields may need manual entry.",
       })
     }
     
     onSubmitSuccess?.()
   }
 
-  const handleViewReview = () => {
+  const handleViewJob = () => {
     if (createdJob) {
       router.push(`/jobs/${createdJob.id}`)
     } else {
@@ -268,45 +243,49 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
     setSubmissionMessage(null)
   }
 
-  // Success state - show after job is created
+  // Success state
   if (step === "complete" && createdJob) {
     return (
-      <Card id="review-job" className="border-green-500/50 bg-green-500/5">
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="rounded-full bg-green-500/20 p-4">
-              <CheckCircle2 className="h-8 w-8 text-green-500" />
+      <Card id="review-job" className="border-primary/20 bg-primary/[0.02]">
+        <CardContent className="py-10">
+          <div className="flex flex-col items-center text-center space-y-5">
+            <div className="rounded-full bg-primary/10 p-4">
+              <CheckCircle2 className="h-8 w-8 text-primary" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-xl font-semibold">Job Submitted</h3>
+              <h3 className="text-xl font-semibold">Added to Pipeline</h3>
               <p className="text-muted-foreground max-w-md">
-                The URL was sent to n8n for ingestion, parsing, deduplication, scoring, and Supabase persistence.
+                AI is analyzing fit and generating materials.
               </p>
-              {submissionMessage && (
-                <p className="text-xs text-muted-foreground max-w-md">{submissionMessage}</p>
-              )}
               {isDuplicate && (
-                <p className="text-sm text-amber-600">This URL already existed, so we reused the existing job.</p>
+                <p className="text-sm text-amber-600 flex items-center justify-center gap-1.5 mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Duplicate detected - linked to existing
+                </p>
               )}
               {isPartialParse && (
-                <p className="text-sm text-amber-600">Parsing was incomplete. Scoring/generation may be limited.</p>
+                <p className="text-sm text-amber-600 flex items-center justify-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4" />
+                  Partial parse - review recommended
+                </p>
               )}
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium">{createdJob.company}</span> - {createdJob.title}
-              </p>
+              <div className="pt-2 border-t border-border mt-4">
+                <p className="text-sm font-medium">{createdJob.company}</p>
+                <p className="text-sm text-muted-foreground">{createdJob.title}</p>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3 pt-2">
-              <Button onClick={handleViewReview}>
+            <div className="flex flex-wrap gap-3 pt-3">
+              <Button onClick={handleViewJob} className="h-11 px-5">
                 <Briefcase className="mr-2 h-4 w-4" />
                 View Job
               </Button>
-              <Button variant="outline" asChild>
+              <Button variant="outline" className="h-11 px-5" asChild>
                 <Link href="/jobs">
                   <ListChecks className="mr-2 h-4 w-4" />
-                  View All Jobs
+                  All Jobs
                 </Link>
               </Button>
-              <Button variant="ghost" onClick={handleReset}>
+              <Button variant="ghost" className="h-11 px-5" onClick={handleReset}>
                 Add Another
               </Button>
             </div>
@@ -319,26 +298,22 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
   // Error state
   if (step === "error") {
     return (
-      <Card id="review-job" className="border-destructive/50 bg-destructive/5">
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="rounded-full bg-destructive/20 p-4">
+      <Card id="review-job" className="border-destructive/30 bg-destructive/[0.02]">
+        <CardContent className="py-10">
+          <div className="flex flex-col items-center text-center space-y-5">
+            <div className="rounded-full bg-destructive/10 p-4">
               <ExternalLink className="h-8 w-8 text-destructive" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-xl font-semibold">Failed to Add Job</h3>
+              <h3 className="text-xl font-semibold">Couldn't Process</h3>
               <p className="text-muted-foreground max-w-md">
-                {error || "Something went wrong while adding this job. Please try again."}
+                {error || "Something went wrong. Try again or add manually."}
               </p>
             </div>
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handleReset}>
-                Try Again
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/manual-entry">
-                  Add Manually
-                </Link>
+            <div className="flex gap-3 pt-3">
+              <Button onClick={handleReset} className="h-11 px-5">Try Again</Button>
+              <Button variant="outline" className="h-11 px-5" asChild>
+                <Link href="/manual-entry">Add Manually</Link>
               </Button>
             </div>
           </div>
@@ -351,18 +326,15 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
   if (isProcessing) {
     return (
       <Card id="review-job">
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center text-center space-y-6">
-            <div className="relative">
-              <div className="rounded-full bg-primary/20 p-4">
-                <Loader2 className="h-8 w-8 text-primary animate-spin" />
-              </div>
+        <CardContent className="py-10">
+          <div className="flex flex-col items-center text-center space-y-5">
+            <div className="rounded-full bg-secondary p-4">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
             </div>
-            <div className="space-y-4 w-full max-w-sm">
-              <h3 className="text-lg font-semibold">Submitting URL to n8n</h3>
-              <ProcessingSteps currentStep={step} />
-              <p className="text-xs text-muted-foreground">
-                Waiting for ingestion workflow and Supabase sync
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">Processing</h3>
+              <p className="text-sm text-muted-foreground">
+                Sending to workflow engine...
               </p>
             </div>
           </div>
@@ -373,113 +345,70 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
 
   // Default input state
   return (
-    <Card id="review-job">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Link2 className="h-5 w-5" />
-          Review a Job
-        </CardTitle>
-        <CardDescription>
-          Paste a job posting URL to analyze fit and generate application materials
-        </CardDescription>
+    <Card id="review-job" className="overflow-hidden">
+      <CardHeader className="pb-4 bg-secondary/30">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background border border-border">
+            <Link2 className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <CardTitle className="text-base font-semibold">Add a Job</CardTitle>
+            <CardDescription className="text-sm">
+              Paste the URL. We handle the rest.
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <form onSubmit={handleSubmit}>
           <div className="flex gap-3">
             <Input
               type="url"
-              placeholder="https://boards.greenhouse.io/company/jobs/123456"
+              placeholder="https://boards.greenhouse.io/company/jobs/..."
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="flex-1"
+              className="flex-1 h-12 text-base"
               autoFocus={isFirstTime}
             />
-            <Button type="submit">
+            <Button type="submit" size="lg" className="h-12 px-6">
               <Search className="mr-2 h-4 w-4" />
-              Review Job
+              Analyze
             </Button>
           </div>
         </form>
-        <p className="text-xs text-muted-foreground mt-3">
-          Supports Greenhouse, Lever, and LinkedIn URLs (best effort for LinkedIn)
+        <p className="text-xs text-muted-foreground mt-4">
+          Works with Greenhouse, Lever, LinkedIn, and most public job boards.
         </p>
       </CardContent>
     </Card>
-  )
-}
-
-function ProcessingSteps({ currentStep }: { currentStep: ProcessingStep }) {
-  const steps = [
-    { key: "fetching", label: "Creating job record" },
-    { key: "reviewing", label: "AI analyzing fit & generating materials" },
-    { key: "preparing", label: "Finalizing resume & cover letter" },
-    { key: "submitting", label: "Submitting URL" },
-    { key: "complete", label: "Job visible in Supabase" },
-  ]
-
-  const currentIndex = steps.findIndex(s => s.key === currentStep)
-
-  return (
-    <div className="space-y-2">
-      {steps.map((step, index) => {
-        const isComplete = index < currentIndex
-        const isCurrent = index === currentIndex
-        const isPending = index > currentIndex
-
-        return (
-          <div 
-            key={step.key}
-            className={`flex items-center gap-3 text-sm transition-opacity ${
-              isPending ? "opacity-40" : "opacity-100"
-            }`}
-          >
-            <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
-              isComplete ? "bg-green-500 text-white" :
-              isCurrent ? "bg-primary text-primary-foreground" :
-              "bg-muted text-muted-foreground"
-            }`}>
-              {isComplete ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : isCurrent ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <span className="text-xs">{index + 1}</span>
-              )}
-            </div>
-            <span className={isCurrent ? "font-medium" : ""}>{step.label}</span>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
 export function OnboardingEmptyState() {
   return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="rounded-full bg-muted p-4 mb-4">
-          <Briefcase className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h3 className="text-xl font-semibold mb-2">No jobs reviewed yet</h3>
-        <p className="text-muted-foreground max-w-sm mb-6">
-          Start by pasting a job URL above to begin your job search journey.
-        </p>
-        <div className="flex gap-3">
-          <Button asChild>
-            <a href="#review-job">
-              <Search className="mr-2 h-4 w-4" />
-              Review a Job
-            </a>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/manual-entry">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add Manually
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="py-16 text-center">
+      <div className="inline-flex items-center justify-center rounded-full bg-secondary p-6 mb-6">
+        <Briefcase className="h-10 w-10 text-muted-foreground" />
+      </div>
+      <h3 className="text-xl font-serif font-medium mb-3">Your pipeline is empty</h3>
+      <p className="text-muted-foreground max-w-md mx-auto mb-8">
+        Add your first job to see HireWire in action. Paste a URL above 
+        or enter details manually.
+      </p>
+      <div className="flex justify-center gap-4">
+        <Button size="lg" className="h-12 px-6" asChild>
+          <a href="#review-job">
+            <Search className="mr-2 h-4 w-4" />
+            Review a Job
+          </a>
+        </Button>
+        <Button variant="outline" size="lg" className="h-12 px-6" asChild>
+          <Link href="/manual-entry">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Manually
+          </Link>
+        </Button>
+      </div>
+    </div>
   )
 }
