@@ -1,9 +1,10 @@
+// Dashboard v5 - March 26 2026 07:52
 import { Card, CardContent } from "@/components/ui/card"
 import { getJobStats, getJobs } from "@/lib/actions/jobs"
 import { TrendingUp, ThumbsUp, Send, AlertTriangle, ArrowUpRight } from "lucide-react"
 import { DashboardCharts } from "@/components/dashboard-charts"
 import { ErrorState } from "@/components/error-state"
-import { HeroSection, HowItWorks, JobUrlInput, OnboardingEmptyState, WorkflowSteps } from "@/components/onboarding"
+import { HeroSection, HowItWorks, JobUrlInput, OnboardingEmptyState, WorkflowSteps } from "@/components/job-input"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"

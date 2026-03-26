@@ -1,5 +1,6 @@
+// Jobs Page v5 - March 26 2026 07:52
 import { getJobs } from "@/lib/actions/jobs"
-import { JobsTable } from "@/components/jobs-table"
+import { JobsTable } from "@/components/job-list"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 

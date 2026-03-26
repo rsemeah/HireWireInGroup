@@ -8,9 +8,24 @@ const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
 })
 
-// Schema for job analysis extraction
+// Role families Ro targets - used for categorization
+const ROLE_FAMILIES = [
+  "AI Technical Product Manager",
+  "Technical Product Manager",
+  "AI Product Manager",
+  "Product Manager",
+  "Senior Product Manager",
+  "Systems Product Manager",
+  "Workflow Product Manager",
+  "Analytics Product Manager",
+  "Product Owner",
+  "Program Manager",
+  "Other",
+] as const
+
+// Schema for job analysis extraction - made flexible to handle LLM variations
 const JobAnalysisSchema = z.object({
-  title: z.string().describe("Job title"),
+  title: z.string().describe("Job title as stated"),
   company: z.string().describe("Company name"),
   location: z.string().nullable().describe("Job location or Remote"),
   employment_type: z.string().nullable().describe("Full-time, Part-time, Contract, etc."),
@@ -22,8 +37,22 @@ const JobAnalysisSchema = z.object({
   keywords: z.array(z.string()).describe("Important keywords for ATS matching"),
   ats_phrases: z.array(z.string()).describe("Exact phrases to include in resume for ATS"),
   tech_stack: z.array(z.string()).describe("Technologies, tools, and frameworks mentioned"),
-  industries: z.array(z.string()).describe("Industries or domains relevant to this role"),
-  seniority_level: z.string().describe("Entry, Mid, Senior, Lead, Principal, etc."),
+  
+  // New fields for TruthSerum - made nullable/flexible to handle edge cases
+  role_family: z.enum(ROLE_FAMILIES).describe("Best matching role family for categorization"),
+  industry_guess: z.string().nullable().describe("Primary industry (AI, SaaS, FinTech, EdTech, etc.) or null if unknown"),
+  seniority_level: z.string().nullable().describe("Seniority level: Entry, Mid, Senior, Lead, Principal, Director, VP, or C-Level"),
+  
+  // Fit signals for Ro specifically
+  fit_signals: z.object({
+    has_ai_focus: z.boolean().describe("Does the role involve AI/ML products?"),
+    has_technical_requirements: z.boolean().describe("Does it require technical fluency?"),
+    has_workflow_focus: z.boolean().describe("Does it involve workflow/automation?"),
+    has_startup_culture: z.boolean().describe("Is this a startup or agile environment?"),
+    has_pure_engineering: z.boolean().describe("Is this primarily an engineering role?"),
+    has_people_management: z.boolean().describe("Does it require managing people?"),
+    product_ownership_level: z.enum(["low", "medium", "high"]).describe("How much product ownership?"),
+  }).describe("Fit signals for role matching"),
 })
 
 async function fetchJobPage(url: string): Promise<string> {
@@ -80,6 +109,71 @@ function detectSource(url: string): string {
   return "OTHER"
 }
 
+// Normalize seniority level to standard values
+function normalizeSeniority(level: string | null): string {
+  if (!level) return "Mid"
+  const lower = level.toLowerCase()
+  if (lower.includes("entry") || lower.includes("junior") || lower.includes("associate")) return "Entry"
+  if (lower.includes("senior") || lower.includes("sr.") || lower.includes("sr ")) return "Senior"
+  if (lower.includes("lead") || lower.includes("principal") || lower.includes("staff")) return "Lead"
+  if (lower.includes("director")) return "Director"
+  if (lower.includes("vp") || lower.includes("vice president")) return "VP"
+  if (lower.includes("c-level") || lower.includes("chief") || lower.includes("cto") || lower.includes("cpo")) return "C-Level"
+  if (lower.includes("mid") || lower.includes("intermediate")) return "Mid"
+  return "Mid" // Default to Mid if unclear
+}
+
+// Calculate initial fit based on fit signals
+function calculateInitialFit(fitSignals: z.infer<typeof JobAnalysisSchema>["fit_signals"]): {
+  fit: "HIGH" | "MEDIUM" | "LOW"
+  score: number
+  reasoning: string[]
+} {
+  let score = 50 // Start at neutral
+  const reasoning: string[] = []
+
+  // Positive signals for Ro
+  if (fitSignals.has_ai_focus) {
+    score += 15
+    reasoning.push("AI/ML product focus aligns well")
+  }
+  if (fitSignals.has_technical_requirements) {
+    score += 10
+    reasoning.push("Technical fluency requirement matches")
+  }
+  if (fitSignals.has_workflow_focus) {
+    score += 10
+    reasoning.push("Workflow/automation focus is a strength")
+  }
+  if (fitSignals.has_startup_culture) {
+    score += 5
+    reasoning.push("Startup culture fits founder-style approach")
+  }
+  if (fitSignals.product_ownership_level === "high") {
+    score += 10
+    reasoning.push("High product ownership aligns with experience")
+  } else if (fitSignals.product_ownership_level === "medium") {
+    score += 5
+  }
+
+  // Negative signals
+  if (fitSignals.has_pure_engineering) {
+    score -= 20
+    reasoning.push("Pure engineering role - not ideal fit")
+  }
+  if (fitSignals.has_people_management) {
+    score -= 10
+    reasoning.push("People management not a primary strength")
+  }
+
+  // Clamp score
+  score = Math.max(0, Math.min(100, score))
+
+  const fit = score >= 70 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW"
+
+  return { fit, score, reasoning }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -124,17 +218,34 @@ export async function POST(request: NextRequest) {
     // Check for existing job with this URL
     const { data: existingJob } = await supabase
       .from("jobs")
-      .select("id, title, company, status")
+      .select("*")
       .eq("source_url", job_url)
       .maybeSingle()
 
     if (existingJob) {
+      // Return full analysis data for duplicates so UI can render properly
       return NextResponse.json({
         success: true,
         job_id: existingJob.id,
         duplicate: true,
         message: `This job is already in your pipeline: ${existingJob.title} at ${existingJob.company}`,
         job: existingJob,
+        analysis: {
+          title: existingJob.title || "Unknown Title",
+          company: existingJob.company || "Unknown Company",
+          location: existingJob.location,
+          employment_type: existingJob.employment_type,
+          salary_text: existingJob.salary_range,
+          responsibilities: existingJob.responsibilities || [],
+          qualifications_required: existingJob.qualifications_required || [],
+          qualifications_preferred: existingJob.qualifications_preferred || [],
+          keywords: existingJob.ats_keywords || existingJob.keywords_extracted || [],
+          ats_phrases: [],
+          tech_stack: [],
+          seniority_level: existingJob.seniority_level || "Unknown",
+          role_family: existingJob.role_family || "Product Manager",
+          industry_guess: existingJob.industry_guess || "Unknown",
+        },
       })
     }
 
@@ -164,13 +275,32 @@ export async function POST(request: NextRequest) {
 
 Be precise and extract only what is explicitly stated. Do not invent or assume information.
 
+Role family options for categorization:
+- AI Technical Product Manager (AI products + technical depth)
+- Technical Product Manager (technical products, systems, APIs)
+- AI Product Manager (AI products, less technical)
+- Product Manager (general product roles)
+- Senior Product Manager (senior IC roles)
+- Systems Product Manager (infrastructure, platform)
+- Workflow Product Manager (automation, process)
+- Analytics Product Manager (data, analytics products)
+- Product Owner (scrum-focused)
+- Program Manager (coordination, delivery)
+- Other (doesn't fit above)
+
 Job posting content:
 ${pageContent}
 
-Extract the job details following the schema. For arrays, include all relevant items found. For nullable fields, return null if not mentioned.`,
+Extract the job details following the schema. Be accurate with the role_family categorization based on the actual role requirements.`,
     })
 
-    // Create job record
+    // Calculate initial fit
+    const fitResult = calculateInitialFit(analysis.fit_signals)
+    
+    // Normalize seniority level
+    const normalizedSeniority = normalizeSeniority(analysis.seniority_level)
+
+    // Create job record with new fields
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -187,6 +317,15 @@ Extract the job details following the schema. For arrays, include all relevant i
         qualifications_preferred: analysis.qualifications_preferred,
         ats_keywords: analysis.keywords,
         keywords_extracted: analysis.keywords,
+        // New TruthSerum fields
+        role_family: analysis.role_family,
+        industry_guess: analysis.industry_guess || "Unknown",
+        seniority_level: normalizedSeniority,
+        // Initial scoring
+        fit: fitResult.fit,
+        score: fitResult.score,
+        score_strengths: fitResult.reasoning.filter(r => !r.includes("not")),
+        score_gaps: fitResult.reasoning.filter(r => r.includes("not")),
         status: "NEW",
         analyzed_at: new Date().toISOString(),
       })
@@ -215,8 +354,9 @@ Extract the job details following the schema. For arrays, include all relevant i
       qualifications_preferred: analysis.qualifications_preferred,
       keywords: analysis.keywords,
       ats_phrases: analysis.ats_phrases,
+      ats_match_score: fitResult.score,
       analysis_model: "llama-3.3-70b-versatile",
-      analysis_version: "1.0",
+      analysis_version: "2.0-truthserum",
     })
 
     return NextResponse.json({
@@ -235,8 +375,12 @@ Extract the job details following the schema. For arrays, include all relevant i
         keywords: analysis.keywords,
         ats_phrases: analysis.ats_phrases,
         tech_stack: analysis.tech_stack,
-        seniority_level: analysis.seniority_level,
+        seniority_level: normalizedSeniority,
+        role_family: analysis.role_family,
+        industry_guess: analysis.industry_guess || "Unknown",
+        fit_signals: analysis.fit_signals,
       },
+      initial_fit: fitResult,
       job,
     })
   } catch (error) {
