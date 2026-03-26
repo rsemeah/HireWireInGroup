@@ -45,9 +45,13 @@ const STATUS_GROUP_CONFIG = {
 type StatusGroup = keyof typeof STATUS_GROUP_CONFIG
 
 function formatDate(dateString: string) {
+  // Parse the date and format in UTC to avoid hydration mismatch
   const date = new Date(dateString)
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-  return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
+  // Use UTC methods consistently
+  const month = months[date.getUTCMonth()]
+  const day = date.getUTCDate()
+  return `${month} ${day}`
 }
 
 // Check if a job has malformed/placeholder data
@@ -151,7 +155,7 @@ function JobRow({ job, viewMode }: { job: Job; viewMode: "list" | "card" }) {
             </div>
             <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
               <span>{job.location || "Remote"}</span>
-              <span>{formatDate(job.created_at)}</span>
+              <span suppressHydrationWarning>{formatDate(job.created_at)}</span>
             </div>
           </CardContent>
         </Card>
@@ -182,7 +186,7 @@ function JobRow({ job, viewMode }: { job: Job; viewMode: "list" | "card" }) {
       <div className="flex items-center gap-4">
         <MaterialsIndicator job={job} />
         <StatusBadge status={job.status} />
-        <span className="text-xs text-muted-foreground w-16 text-right">
+        <span className="text-xs text-muted-foreground w-16 text-right" suppressHydrationWarning>
           {formatDate(job.created_at)}
         </span>
       </div>

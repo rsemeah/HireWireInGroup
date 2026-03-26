@@ -8,6 +8,52 @@ const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
 })
 
+// TruthSerum banned phrases - these should NEVER appear in generated output
+const BANNED_PHRASES = [
+  "I am excited to apply",
+  "I would be thrilled",
+  "passionate about",
+  "leverage my skills",
+  "hit the ground running",
+  "think outside the box",
+  "synergy",
+  "dynamic environment",
+  "fast-paced",
+  "self-starter",
+  "detail-oriented",
+  "team player",
+  "results-driven",
+  "proven track record",
+  "seasoned professional",
+  "spearheaded initiatives",
+  "drove results",
+  "moved the needle",
+  "at the end of the day",
+  "circle back",
+  "low-hanging fruit",
+  "core competencies",
+  "value-add",
+  "best-in-class",
+  "cutting-edge",
+  "game-changer",
+  "paradigm shift",
+  "robust",
+  "scalable solutions",
+  "stakeholder alignment",
+]
+
+// Check for banned phrases in text
+function detectBannedPhrases(text: string): string[] {
+  const found: string[] = []
+  const lowerText = text.toLowerCase()
+  for (const phrase of BANNED_PHRASES) {
+    if (lowerText.includes(phrase.toLowerCase())) {
+      found.push(phrase)
+    }
+  }
+  return found
+}
+
 // Schema for evidence mapping
 const EvidenceMapSchema = z.object({
   matched_skills: z.array(z.string()).describe("Skills from profile that match job requirements"),
@@ -293,7 +339,12 @@ Paragraph 2-3: Specific evidence of your relevant experience and impact
 Paragraph 4: Brief closing with next steps`,
     })
 
-    // Step 4: Quality check
+    // Step 4: Detect banned phrases
+    const resumeBannedPhrases = detectBannedPhrases(generatedResume)
+    const coverLetterBannedPhrases = detectBannedPhrases(generatedCoverLetter)
+    const allBannedPhrases = [...new Set([...resumeBannedPhrases, ...coverLetterBannedPhrases])]
+
+    // Step 5: AI Quality check
     const { object: qualityCheck } = await generateObject({
       model: groq("llama-3.3-70b-versatile"),
       schema: QualityCheckSchema,
@@ -333,8 +384,9 @@ Be strict - flag anything that seems fabricated or generic.`,
         status: "SCORED",
         scored_at: new Date().toISOString(),
         generation_timestamp: new Date().toISOString(),
-        generation_quality_score: qualityCheck.overall_passed ? 100 : 50,
+        generation_quality_score: qualityCheck.overall_passed && allBannedPhrases.length === 0 ? 100 : 50,
         generation_quality_issues: [
+          ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
           ...qualityCheck.invented_claims,
           ...qualityCheck.vague_bullets,
           ...qualityCheck.ai_filler,
@@ -387,11 +439,13 @@ Be strict - flag anything that seems fabricated or generic.`,
       generated_resume: generatedResume,
       generated_cover_letter: generatedCoverLetter,
       quality_check: {
-        passed: qualityCheck.overall_passed,
+        passed: qualityCheck.overall_passed && allBannedPhrases.length === 0,
+        banned_phrases_found: allBannedPhrases,
         issues: {
           invented_claims: qualityCheck.invented_claims,
           vague_bullets: qualityCheck.vague_bullets,
           ai_filler: qualityCheck.ai_filler,
+          banned_phrases: allBannedPhrases,
         },
         suggestions: qualityCheck.improvement_suggestions,
       },

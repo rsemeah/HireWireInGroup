@@ -165,20 +165,20 @@ type ProcessingStep = "idle" | "analyzing" | "generating" | "complete" | "error"
 
 interface AnalysisResult {
   job: Job
-  analysis: {
-    title: string
-    company: string
-    location: string | null
-    employment_type: string | null
-    salary_text: string | null
-    responsibilities: string[]
-    qualifications_required: string[]
-    qualifications_preferred: string[]
-    keywords: string[]
-    ats_phrases: string[]
-    tech_stack: string[]
-    seniority_level: string
-  }
+  analysis?: {
+    title?: string
+    company?: string
+    location?: string | null
+    employment_type?: string | null
+    salary_text?: string | null
+    responsibilities?: string[]
+    qualifications_required?: string[]
+    qualifications_preferred?: string[]
+    keywords?: string[]
+    ats_phrases?: string[]
+    tech_stack?: string[]
+    seniority_level?: string
+  } | null
   generation?: {
     job_id: string
     evidence_map: {
@@ -451,7 +451,7 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
                           variant="outline"
                           onClick={() => handleDownload(
                             generation.generated_resume,
-                            `resume-${analysis.company.toLowerCase().replace(/\s+/g, "-")}.txt`
+                            `resume-${(analysis?.company || result.job?.company || "job").toLowerCase().replace(/\s+/g, "-")}.txt`
                           )}
                         >
                           <Download className="h-4 w-4 mr-2" />
@@ -484,7 +484,7 @@ export function JobUrlInput({ onSubmitSuccess, isFirstTime = false }: JobUrlInpu
                           variant="outline"
                           onClick={() => handleDownload(
                             generation.generated_cover_letter,
-                            `cover-letter-${analysis.company.toLowerCase().replace(/\s+/g, "-")}.txt`
+                            `cover-letter-${(analysis?.company || result.job?.company || "job").toLowerCase().replace(/\s+/g, "-")}.txt`
                           )}
                         >
                           <Download className="h-4 w-4 mr-2" />
