@@ -2,7 +2,8 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, RefreshCw, Database, Workflow } from "lucide-react"
+import { AlertTriangle, RefreshCw, Database, Workflow, Settings } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface ErrorStateProps {
   title?: string
@@ -17,6 +18,16 @@ export function ErrorState({
   onRetry,
   showRetry = true
 }: ErrorStateProps) {
+  const router = useRouter()
+
+  const handleRetry = () => {
+    if (onRetry) {
+      onRetry()
+    } else {
+      router.refresh()
+    }
+  }
+
   return (
     <Card className="border-dashed border-amber-500/30 bg-amber-500/5">
       <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -29,7 +40,7 @@ export function ErrorState({
         </p>
         
         <div className="flex flex-col gap-4 items-center">
-          <div className="flex gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap justify-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4" />
               <span>Check Supabase connection</span>
@@ -39,11 +50,15 @@ export function ErrorState({
               <span>Check n8n workflow status</span>
             </div>
           </div>
+
+          <p className="text-xs text-muted-foreground max-w-sm">
+            Open Settings (top right) to verify Supabase is connected and environment variables are configured.
+          </p>
           
-          {showRetry && onRetry && (
-            <Button variant="outline" onClick={onRetry}>
+          {showRetry && (
+            <Button variant="outline" onClick={handleRetry}>
               <RefreshCw className="mr-2 h-4 w-4" />
-              Retry
+              Retry Connection
             </Button>
           )}
         </div>
