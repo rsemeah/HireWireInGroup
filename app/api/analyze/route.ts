@@ -359,6 +359,47 @@ Extract the job details following the schema. Be accurate with the role_family c
       analysis_version: "2.0-truthserum",
     })
 
+    // AUTO-GENERATE: Immediately trigger document generation after successful analysis
+    // This ensures the user sees complete materials without manual intervention
+    let generationResult = null
+    let generationError = null
+    
+    try {
+      // Construct the base URL using Vercel environment variables
+      const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL
+      const baseUrl = vercelUrl 
+        ? `https://${vercelUrl}` 
+        : (request.headers.get("origin") || `http://${request.headers.get("host") || "localhost:3000"}`)
+      
+      console.log("[v0] Calling generate-documents at:", `${baseUrl}/api/generate-documents`)
+      
+      // Call generate-documents API internally
+      const generateResponse = await fetch(`${baseUrl}/api/generate-documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: job.id }),
+      })
+      
+      generationResult = await generateResponse.json()
+      
+      if (!generationResult.success) {
+        generationError = generationResult.error
+        console.error("[v0] Auto-generation failed:", generationError)
+      } else {
+        console.log("[v0] Auto-generation successful for job:", job.id)
+      }
+    } catch (genErr) {
+      generationError = genErr instanceof Error ? genErr.message : "Auto-generation failed"
+      console.error("[v0] Auto-generation error:", genErr)
+    }
+
+    // Fetch the updated job with generated materials
+    const { data: updatedJob } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", job.id)
+      .single()
+
     return NextResponse.json({
       success: true,
       job_id: job.id,
@@ -381,7 +422,15 @@ Extract the job details following the schema. Be accurate with the role_family c
         fit_signals: analysis.fit_signals,
       },
       initial_fit: fitResult,
-      job,
+      job: updatedJob || job,
+      // Include generation status so UI knows what happened
+      generation: {
+        attempted: true,
+        success: generationResult?.success || false,
+        error: generationError,
+        strategy: generationResult?.strategy,
+        quality_passed: generationResult?.quality_check?.passed,
+      },
     })
   } catch (error) {
     console.error("Error in analyze-job:", error)
