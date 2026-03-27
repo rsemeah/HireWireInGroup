@@ -353,29 +353,57 @@ function RequirementCard({
   return (
     <Card className={`${statusBg[match.status]} border`}>
       <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          {statusIcon[match.status]}
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm">{match.requirement}</p>
-            
-            {match.matchedEvidence.length > 0 ? (
-              <div className="mt-3 space-y-2">
-                {match.matchedEvidence.map(evidence => (
-                  <div 
-                    key={evidence.id}
-                    className="flex items-start gap-3 p-3 bg-background rounded-lg border"
-                  >
+                    <div className="flex items-start gap-3">
                     <Checkbox
                       checked={selectedEvidence.has(evidence.id)}
                       onCheckedChange={() => onToggleEvidence(evidence.id)}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{evidence.project_name || evidence.source_title}</span>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className={`text-xs ${
+                          evidence.confidence_level === "high" ? "border-green-200 bg-green-50 text-green-700" :
+                          evidence.confidence_level === "medium" ? "border-amber-200 bg-amber-50 text-amber-700" :
+                          "border-red-200 bg-red-50 text-red-700"
+                        }`}>
                           {evidence.confidence_level}
                         </Badge>
+                        <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700">
+                          {evidence.source_type || "work_experience"}
+                        </Badge>
                       </div>
+                      {evidence.company_name && (
+                        <p className="text-xs text-muted-foreground">{evidence.company_name} {evidence.role_title ? `- ${evidence.role_title}` : ""}</p>
+                      )}
+                      {evidence.outcomes && evidence.outcomes.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          <strong>Outcome:</strong> {evidence.outcomes[0]}
+                        </p>
+                      )}
+                      {evidence.tools_used && evidence.tools_used.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {evidence.tools_used.slice(0, 4).map((tool, i) => (
+                            <Badge key={i} variant="secondary" className="text-[10px] px-1 py-0">
+                              {tool}
+                            </Badge>
+                          ))}
+                          {evidence.tools_used.length > 4 && (
+                            <span className="text-[10px] text-muted-foreground">+{evidence.tools_used.length - 4} more</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {evidence.source_url && (
+                      <a 
+                        href={evidence.source_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <Link2 className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
                       {evidence.company_name && (
                         <p className="text-xs text-muted-foreground">{evidence.company_name}</p>
                       )}
