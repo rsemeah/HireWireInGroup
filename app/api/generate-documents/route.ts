@@ -344,9 +344,9 @@ Paragraph 4: Brief closing with next steps`,
     const coverLetterBannedPhrases = detectBannedPhrases(generatedCoverLetter)
     const allBannedPhrases = [...new Set([...resumeBannedPhrases, ...coverLetterBannedPhrases])]
 
-    // Step 5: AI Quality check
+    // Step 5: AI Quality check - use smaller model to avoid rate limits
     const { object: qualityCheck } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq("llama-3.1-8b-instant"),
       schema: QualityCheckSchema,
       prompt: `Review this generated resume and cover letter for quality issues.
 
@@ -450,11 +450,27 @@ Be strict - flag anything that seems fabricated or generic.`,
         suggestions: qualityCheck.improvement_suggestions,
       },
     })
-  } catch (error) {
-    console.error("Error in generate-documents:", error)
+} catch (error) {
+  console.error("Error in generate-documents:", error)
+  
+  // Check for rate limit errors
+  const errorMessage = error instanceof Error ? error.message : "Generation failed"
+  const isRateLimit = errorMessage.includes("rate_limit") || errorMessage.includes("Rate limit")
+  
+  if (isRateLimit) {
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Generation failed" },
-      { status: 500 }
+      { 
+        success: false, 
+        error: "AI service is temporarily busy. Please wait 30 seconds and try again.",
+        retryAfter: 30
+      },
+      { status: 429 }
     )
+  }
+  
+  return NextResponse.json(
+    { success: false, error: errorMessage },
+    { status: 500 }
+  )
   }
 }

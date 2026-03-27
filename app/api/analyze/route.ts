@@ -385,8 +385,24 @@ Extract the job details following the schema. Be accurate with the role_family c
     })
   } catch (error) {
     console.error("Error in analyze-job:", error)
+    
+    // Check for rate limit errors
+    const errorMessage = error instanceof Error ? error.message : "Analysis failed"
+    const isRateLimit = errorMessage.includes("rate_limit") || errorMessage.includes("Rate limit")
+    
+    if (isRateLimit) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "AI service is temporarily busy. Please wait 30 seconds and try again.",
+          retryAfter: 30
+        },
+        { status: 429 }
+      )
+    }
+    
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Analysis failed" },
+      { success: false, error: errorMessage },
       { status: 500 }
     )
   }
