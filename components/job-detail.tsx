@@ -363,6 +363,58 @@ export function JobDetail({ job }: JobDetailProps) {
         </Card>
       )}
 
+      {/* TruthSerum Workflow */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Target className="h-5 w-5 text-primary" />
+            TruthSerum Workflow
+          </CardTitle>
+          <CardDescription>
+            Complete each step to build an evidence-backed application
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Link href={`/jobs/${job.id}/evidence-match`}>
+              <div className="p-4 border rounded-lg hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-blue-600">1</span>
+                  </div>
+                  <h4 className="font-medium">Evidence Match</h4>
+                </div>
+                <p className="text-xs text-muted-foreground">Map requirements to your verified evidence</p>
+              </div>
+            </Link>
+            
+            <Link href={`/jobs/${job.id}/scoring`}>
+              <div className="p-4 border rounded-lg hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-green-600">2</span>
+                  </div>
+                  <h4 className="font-medium">Scoring Center</h4>
+                </div>
+                <p className="text-xs text-muted-foreground">Review detailed fit breakdown and decide</p>
+              </div>
+            </Link>
+            
+            <Link href={`/jobs/${job.id}/red-team`}>
+              <div className="p-4 border rounded-lg hover:border-primary/50 hover:bg-muted/50 transition-colors cursor-pointer">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-red-600">3</span>
+                  </div>
+                  <h4 className="font-medium">Red Team Review</h4>
+                </div>
+                <p className="text-xs text-muted-foreground">Quality check before export</p>
+              </div>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Tabbed Content */}
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">

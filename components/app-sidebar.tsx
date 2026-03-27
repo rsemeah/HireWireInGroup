@@ -15,6 +15,7 @@ import {
   Settings,
   PlusCircle,
   User,
+  Sliders,
 } from "lucide-react"
 import {
   Sidebar,
@@ -44,6 +45,7 @@ const navigation = [
 
 const bottomNavigation = [
   { name: "Profile", href: "/profile", icon: User },
+  { name: "Templates", href: "/templates", icon: Sliders },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
