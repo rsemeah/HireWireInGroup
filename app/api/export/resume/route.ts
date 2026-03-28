@@ -7,8 +7,11 @@ import {
 import {
   exportResumeToDocx,
   exportResumeToHtml,
-  generateFilename,
 } from "@/lib/export"
+import { 
+  generateDocumentFilename,
+  type ExportExtension,
+} from "@/lib/filename-utils"
 import type { ResumeTemplateType } from "@/lib/types"
 
 export async function POST(request: NextRequest) {
@@ -83,13 +86,13 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const filename = generateFilename(
-        profile?.full_name || "Candidate",
-        job.company,
-        job.title,
-        "resume",
-        "docx"
-      )
+      const filename = generateDocumentFilename({
+        candidateName: profile?.full_name || "Candidate",
+        role: job.title,
+        company: job.company,
+        documentType: "resume",
+        extension: "docx",
+      })
 
       return new NextResponse(result.data as Buffer, {
         headers: {
@@ -110,16 +113,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (format === "txt") {
+      const txtFilename = generateDocumentFilename({
+        candidateName: profile?.full_name || "Candidate",
+        role: job.title,
+        company: job.company,
+        documentType: "resume",
+        extension: "txt",
+      })
+      
       return new NextResponse(job.generated_resume, {
         headers: {
           "Content-Type": "text/plain",
-          "Content-Disposition": `attachment; filename="${generateFilename(
-            profile?.full_name || "Candidate",
-            job.company,
-            job.title,
-            "resume",
-            "txt"
-          )}"`,
+          "Content-Disposition": `attachment; filename="${txtFilename}"`,
         },
       })
     }

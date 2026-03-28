@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import type { Job, JobStatus, JobFit, RoleFamily } from "@/lib/types"
@@ -153,6 +153,29 @@ export function JobDetail({ job }: JobDetailProps) {
   const [status, setStatus] = useState<JobStatus>(job.status)
   const [isPending, startTransition] = useTransition()
   const [isGenerating, setIsGenerating] = useState(false)
+  const [candidateName, setCandidateName] = useState("Candidate")
+
+  // Load candidate name from profile
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const { createBrowserClient } = await import("@/lib/supabase/client")
+        const supabase = createBrowserClient()
+        const { data } = await supabase
+          .from("user_profile")
+          .select("full_name")
+          .limit(1)
+          .maybeSingle()
+        
+        if (data?.full_name) {
+          setCandidateName(data.full_name)
+        }
+      } catch (error) {
+        // Silently fail, use default
+      }
+    }
+    loadProfile()
+  }, [])
 
   // Computed states
   const hasResume = !!job.generated_resume
@@ -488,7 +511,7 @@ export function JobDetail({ job }: JobDetailProps) {
                   hasCoverLetter={hasCoverLetter}
                   resumeText={job.generated_resume || undefined}
                   coverLetterText={job.generated_cover_letter || undefined}
-                  candidateName="Candidate"
+                  candidateName={candidateName}
                   company={job.company}
                   role={job.title}
                 />
@@ -881,7 +904,7 @@ export function JobDetail({ job }: JobDetailProps) {
                     hasResume={hasResume}
                     hasCoverLetter={false}
                     resumeText={job.generated_resume || undefined}
-                    candidateName="Candidate"
+                    candidateName={candidateName}
                     company={job.company}
                     role={job.title}
                   />
@@ -926,7 +949,7 @@ export function JobDetail({ job }: JobDetailProps) {
                     hasResume={false}
                     hasCoverLetter={hasCoverLetter}
                     coverLetterText={job.generated_cover_letter || undefined}
-                    candidateName="Candidate"
+                    candidateName={candidateName}
                     company={job.company}
                     role={job.title}
                   />

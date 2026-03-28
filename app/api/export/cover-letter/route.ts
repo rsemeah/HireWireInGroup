@@ -7,8 +7,10 @@ import {
 import {
   exportCoverLetterToDocx,
   exportCoverLetterToHtml,
-  generateFilename,
 } from "@/lib/export"
+import { 
+  generateDocumentFilename,
+} from "@/lib/filename-utils"
 import type { ResumeTemplateType } from "@/lib/types"
 
 export async function POST(request: NextRequest) {
@@ -78,13 +80,13 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      const filename = generateFilename(
-        senderName,
-        job.company,
-        job.title,
-        "cover_letter",
-        "docx"
-      )
+      const filename = generateDocumentFilename({
+        candidateName: senderName,
+        role: job.title,
+        company: job.company,
+        documentType: "cover_letter",
+        extension: "docx",
+      })
 
       return new NextResponse(result.data as Buffer, {
         headers: {
@@ -105,16 +107,18 @@ export async function POST(request: NextRequest) {
     }
 
     if (format === "txt") {
+      const txtFilename = generateDocumentFilename({
+        candidateName: senderName,
+        role: job.title,
+        company: job.company,
+        documentType: "cover_letter",
+        extension: "txt",
+      })
+      
       return new NextResponse(job.generated_cover_letter, {
         headers: {
           "Content-Type": "text/plain",
-          "Content-Disposition": `attachment; filename="${generateFilename(
-            senderName,
-            job.company,
-            job.title,
-            "cover_letter",
-            "txt"
-          )}"`,
+          "Content-Disposition": `attachment; filename="${txtFilename}"`,
         },
       })
     }

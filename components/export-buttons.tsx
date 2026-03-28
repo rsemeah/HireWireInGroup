@@ -20,6 +20,7 @@ import {
   FileDown,
 } from "lucide-react"
 import { toast } from "sonner"
+import { generateDocumentFilename, type DocumentType, type ExportExtension } from "@/lib/filename-utils"
 
 interface ExportButtonsProps {
   jobId: string
@@ -47,14 +48,18 @@ export function ExportButtons({
   const [copiedCover, setCopiedCover] = useState(false)
 
   const handleExport = async (
-    documentType: "resume" | "cover-letter",
-    format: "docx" | "txt" | "html"
+    documentType: DocumentType,
+    format: ExportExtension
   ) => {
     const key = `${documentType}-${format}`
     setIsExporting(key)
 
     try {
-      const response = await fetch(`/api/export/${documentType}`, {
+      const endpoint = documentType === "resume" 
+        ? "/api/export/resume" 
+        : "/api/export/cover-letter"
+      
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -69,19 +74,27 @@ export function ExportButtons({
         throw new Error(error.error || "Export failed")
       }
 
+      // Generate filename using the utility
+      const filename = generateDocumentFilename({
+        candidateName,
+        role,
+        company,
+        documentType,
+        extension: format,
+      })
+
       // For DOCX, download the file
       if (format === "docx") {
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = response.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/"/g, "") || 
-          `${candidateName}_${company}_${documentType === "resume" ? "Resume" : "CoverLetter"}.docx`
+        a.download = filename
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
-        toast.success(`${documentType === "resume" ? "Resume" : "Cover letter"} downloaded as DOCX`)
+        toast.success(`Downloaded ${filename}`)
       }
 
       // For TXT, download the file
@@ -91,12 +104,12 @@ export function ExportButtons({
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement("a")
         a.href = url
-        a.download = `${candidateName}_${company}_${documentType === "resume" ? "Resume" : "CoverLetter"}.txt`
+        a.download = filename
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
-        toast.success(`${documentType === "resume" ? "Resume" : "Cover letter"} downloaded as TXT`)
+        toast.success(`Downloaded ${filename}`)
       }
 
       // For HTML, open in new tab for preview
@@ -154,8 +167,21 @@ export function ExportButtons({
               Resume
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Export Resume</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-1">
+                <span className="font-medium">Export Resume</span>
+                <span className="text-xs text-muted-foreground font-mono truncate">
+                  {generateDocumentFilename({
+                    candidateName,
+                    role,
+                    company,
+                    documentType: "resume",
+                    extension: "docx",
+                  }).replace(".docx", ".*")}
+                </span>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               onClick={() => handleExport("resume", "docx")}
@@ -196,7 +222,7 @@ export function ExportButtons({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="gap-2">
-              {isExporting?.startsWith("cover-letter") ? (
+              {isExporting?.startsWith("cover_letter") ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <FileDown className="h-4 w-4" />
@@ -204,26 +230,39 @@ export function ExportButtons({
               Cover Letter
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Export Cover Letter</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-1">
+                <span className="font-medium">Export Cover Letter</span>
+                <span className="text-xs text-muted-foreground font-mono truncate">
+                  {generateDocumentFilename({
+                    candidateName,
+                    role,
+                    company,
+                    documentType: "cover_letter",
+                    extension: "docx",
+                  }).replace(".docx", ".*")}
+                </span>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
-              onClick={() => handleExport("cover-letter", "docx")}
-              disabled={isExporting === "cover-letter-docx"}
+              onClick={() => handleExport("cover_letter", "docx")}
+              disabled={isExporting === "cover_letter-docx"}
             >
               <File className="h-4 w-4 mr-2 text-blue-500" />
               Download DOCX
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleExport("cover-letter", "txt")}
-              disabled={isExporting === "cover-letter-txt"}
+              onClick={() => handleExport("cover_letter", "txt")}
+              disabled={isExporting === "cover_letter-txt"}
             >
               <FileText className="h-4 w-4 mr-2 text-gray-500" />
               Download TXT
             </DropdownMenuItem>
             <DropdownMenuItem 
-              onClick={() => handleExport("cover-letter", "html")}
-              disabled={isExporting === "cover-letter-html"}
+              onClick={() => handleExport("cover_letter", "html")}
+              disabled={isExporting === "cover_letter-html"}
             >
               <FileText className="h-4 w-4 mr-2 text-orange-500" />
               Preview HTML
@@ -249,7 +288,7 @@ export function ExportButtons({
           className="gap-2"
           onClick={async () => {
             await handleExport("resume", "docx")
-            await handleExport("cover-letter", "docx")
+            await handleExport("cover_letter", "docx")
           }}
           disabled={!!isExporting}
         >
