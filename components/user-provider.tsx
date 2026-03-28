@@ -80,7 +80,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           await fetchProfile(user.id)
         }
       } catch (error) {
-        console.error("Error initializing auth:", error)
+        // Ignore lock errors - these happen when multiple requests compete for the auth token
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        if (!errorMessage.includes("Lock") && !errorMessage.includes("released because another request")) {
+          console.error("Error initializing auth:", error)
+        }
       } finally {
         setIsLoading(false)
       }

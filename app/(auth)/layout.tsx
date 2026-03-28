@@ -18,7 +18,9 @@ export default function AuthLayout({
               width={180}
               height={64}
               className="object-contain brightness-0 invert"
+              style={{ width: 'auto', height: 'auto' }}
               priority
+              loading="eager"
             />
           </div>
           <div className="space-y-6">
@@ -61,6 +63,7 @@ export default function AuthLayout({
               width={150}
               height={53}
               className="object-contain mx-auto"
+              style={{ width: 'auto', height: 'auto' }}
               priority
               loading="eager"
             />

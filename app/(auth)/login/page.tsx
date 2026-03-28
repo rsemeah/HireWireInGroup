@@ -12,8 +12,9 @@ import { useState, Suspense } from "react"
 import { Loader2, Mail } from "lucide-react"
 
 function LoginForm() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+  // Use empty strings as defaults to prevent null/undefined warnings
+  const [email, setEmail] = useState<string>("")
+  const [password, setPassword] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isMagicLinkSent, setIsMagicLinkSent] = useState(false)
@@ -161,28 +162,28 @@ function LoginForm() {
 
         {/* Email Auth */}
         <form onSubmit={authMode === "magic" ? handleMagicLink : handlePasswordLogin}>
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="space-y-4" suppressHydrationWarning>
+            <div className="space-y-2" suppressHydrationWarning>
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 required
-                value={email}
+                value={email || ""}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
               />
             </div>
 
             {authMode === "password" && (
-              <div className="space-y-2">
+              <div className="space-y-2" suppressHydrationWarning>
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
                   required
-                  value={password}
+                  value={password || ""}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
                 />

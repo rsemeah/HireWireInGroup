@@ -120,6 +120,7 @@ export function Topbar() {
           height={36}
           className="object-contain"
           style={{ width: 'auto', height: 'auto' }}
+          loading="eager"
         />
       </Link>
 
@@ -204,6 +205,21 @@ export function Topbar() {
       </Button>
 
       <div className="flex-1" />
+
+      {/* Quick Actions */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="hidden md:flex gap-2 text-xs"
+        onClick={() => router.push("/manual-entry")}
+      >
+        Quick Actions
+      </Button>
+
+      {/* Domain Pill */}
+      <div className="hidden md:flex items-center px-3 py-1.5 bg-card rounded-full border text-xs text-muted-foreground">
+        myhirewire.com
+      </div>
 
       {/* Notifications */}
       <DropdownMenu>
