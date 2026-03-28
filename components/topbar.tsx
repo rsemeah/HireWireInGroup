@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useUser } from "@/components/user-provider"
 import {
   Search,
   Bell,
@@ -34,48 +35,41 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const notifications = [
-  {
-    id: 1,
-    type: "success",
-    title: "Application Submitted",
-    description: "Stripe - Senior Engineer application was submitted",
-    time: "5 minutes ago",
-    read: false,
-  },
-  {
-    id: 2,
-    type: "info",
-    title: "New High-Fit Job",
-    description: "OpenAI - Staff ML Engineer scored 92",
-    time: "1 hour ago",
-    read: false,
-  },
-  {
-    id: 3,
-    type: "warning",
-    title: "Workflow Error",
-    description: "Scoring failed for job #1847",
-    time: "2 hours ago",
-    read: true,
-  },
-  {
-    id: 4,
-    type: "info",
-    title: "Interview Scheduled",
-    description: "Vercel - Interview on March 25th",
-    time: "3 hours ago",
-    read: true,
-  },
-]
+// Notifications will be fetched from database in future
+// For now, show empty state
+const notifications: Array<{
+  id: number
+  type: string
+  title: string
+  description: string
+  time: string
+  read: boolean
+}> = []
+
+function getInitials(name: string | null | undefined, email: string | null | undefined): string {
+  if (name) {
+    const parts = name.trim().split(" ")
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
+  }
+  if (email) {
+    return email.substring(0, 2).toUpperCase()
+  }
+  return "U"
+}
 
 export function Topbar() {
   const router = useRouter()
+  const { user, profile, isLoading, signOut } = useUser()
   const [searchQuery, setSearchQuery] = useState("")
   const [searchOpen, setSearchOpen] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -85,6 +79,15 @@ export function Topbar() {
       router.push(`/jobs?search=${encodeURIComponent(searchQuery.trim())}`)
       setSearchOpen(false)
       setSearchQuery("")
+    }
+  }
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true)
+    try {
+      await signOut()
+    } catch {
+      setIsSigningOut(false)
     }
   }
 
@@ -98,6 +101,10 @@ export function Topbar() {
         return <Briefcase className="h-4 w-4 text-blue-500" />
     }
   }
+
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "User"
+  const displayEmail = user?.email || ""
+  const initials = getInitials(profile?.full_name, user?.email)
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
@@ -113,6 +120,7 @@ export function Topbar() {
           height={36}
           className="object-contain"
           style={{ width: 'auto', height: 'auto' }}
+          loading="eager"
         />
       </Link>
 
@@ -198,6 +206,21 @@ export function Topbar() {
 
       <div className="flex-1" />
 
+      {/* Quick Actions */}
+      <Button
+        variant="outline"
+        size="sm"
+        className="hidden md:flex gap-2 text-xs"
+        onClick={() => router.push("/manual-entry")}
+      >
+        Quick Actions
+      </Button>
+
+      {/* Domain Pill */}
+      <div className="hidden md:flex items-center px-3 py-1.5 bg-card rounded-full border text-xs text-muted-foreground">
+        myhirewire.com
+      </div>
+
       {/* Notifications */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -222,38 +245,41 @@ export function Topbar() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <div className="max-h-80 overflow-y-auto">
-            {notifications.map((notification) => (
-              <DropdownMenuItem
-                key={notification.id}
-                className={cn(
-                  "flex cursor-pointer flex-col items-start gap-1 p-3",
-                  !notification.read && "bg-muted/50"
-                )}
-              >
-                <div className="flex w-full items-start gap-2">
-                  {getNotificationIcon(notification.type)}
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {notification.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {notification.description}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {notification.time}
-                    </p>
-                  </div>
-                  {!notification.read && (
-                    <span className="h-2 w-2 rounded-full bg-primary" />
+            {notifications.length === 0 ? (
+              <div className="p-6 text-center">
+                <Bell className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground">No notifications yet</p>
+              </div>
+            ) : (
+              notifications.map((notification) => (
+                <DropdownMenuItem
+                  key={notification.id}
+                  className={cn(
+                    "flex cursor-pointer flex-col items-start gap-1 p-3",
+                    !notification.read && "bg-muted/50"
                   )}
-                </div>
-              </DropdownMenuItem>
-            ))}
+                >
+                  <div className="flex w-full items-start gap-2">
+                    {getNotificationIcon(notification.type)}
+                    <div className="flex-1 space-y-1">
+                      <p className="text-sm font-medium leading-none">
+                        {notification.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {notification.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {notification.time}
+                      </p>
+                    </div>
+                    {!notification.read && (
+                      <span className="h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </div>
+                </DropdownMenuItem>
+              ))
+            )}
           </div>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="justify-center text-sm font-medium">
-            View all notifications
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -264,21 +290,27 @@ export function Topbar() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="rounded-full">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-              JD
-            </div>
+            {isLoading ? (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                {initials}
+              </div>
+            )}
             <span className="sr-only">Profile menu</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>
             <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium">John Doe</p>
-              <p className="text-xs text-muted-foreground">john@example.com</p>
+              <p className="text-sm font-medium">{displayName}</p>
+              <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push("/settings")}>
+          <DropdownMenuItem onClick={() => router.push("/profile")}>
             <User className="mr-2 h-4 w-4" />
             Profile
           </DropdownMenuItem>
@@ -287,9 +319,17 @@ export function Topbar() {
             Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="text-destructive focus:text-destructive">
-            <LogOut className="mr-2 h-4 w-4" />
-            Log out
+          <DropdownMenuItem 
+            className="text-destructive focus:text-destructive"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+          >
+            {isSigningOut ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="mr-2 h-4 w-4" />
+            )}
+            {isSigningOut ? "Signing out..." : "Sign out"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
