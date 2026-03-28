@@ -360,7 +360,7 @@ export function JobDetail({ job }: JobDetailProps) {
             )}
             <div className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
-              <span>{new Date(job.created_at).toLocaleDateString()}</span>
+              <span suppressHydrationWarning>{new Date(job.created_at).toLocaleDateString()}</span>
             </div>
           </div>
 

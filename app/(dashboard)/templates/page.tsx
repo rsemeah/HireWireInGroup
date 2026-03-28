@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   AlertTriangle,
@@ -23,11 +24,86 @@ import {
   Scale,
   Zap,
   RefreshCw,
+  GraduationCap,
+  Code2,
+  Briefcase,
+  CheckCircle2,
+  ArrowRight,
+  Eye,
+  LayoutGrid,
 } from "lucide-react"
 import { toast } from "sonner"
-import { BANNED_PHRASES } from "@/lib/types"
+import { BANNED_PHRASES, ResumeTemplateType } from "@/lib/types"
+import { RESUME_TEMPLATES, getSectionOrder } from "@/lib/resume-templates"
+import Link from "next/link"
+
+const TEMPLATE_ICONS: Record<ResumeTemplateType, React.ReactNode> = {
+  professional_cv: <GraduationCap className="h-6 w-6" />,
+  technical_resume: <Code2 className="h-6 w-6" />,
+  non_technical_resume: <Briefcase className="h-6 w-6" />,
+}
+
+const TEMPLATE_PREVIEWS: Record<ResumeTemplateType, string[]> = {
+  professional_cv: [
+    "JOHN DOE, Ph.D.",
+    "San Francisco, CA | john@example.com",
+    "",
+    "PROFESSIONAL SUMMARY",
+    "Distinguished researcher with 15+ years...",
+    "",
+    "EXPERIENCE",
+    "Senior Research Scientist | Google | 2018-Present",
+    "• Led team of 8 researchers on language models",
+    "• Published 12 papers in top-tier venues",
+    "",
+    "EDUCATION",
+    "Ph.D. Computer Science | Stanford | 2012",
+    "",
+    "PUBLICATIONS",
+    "• Attention Mechanisms (NeurIPS 2022)",
+  ],
+  technical_resume: [
+    "JANE SMITH",
+    "Seattle, WA | github.com/janesmith",
+    "",
+    "SUMMARY",
+    "Full-stack engineer with 7 years...",
+    "",
+    "TECHNICAL SKILLS",
+    "Languages: Python, TypeScript, Go",
+    "Cloud: AWS, GCP, Kubernetes",
+    "",
+    "PROJECTS",
+    "Analytics Platform | Python, Kafka",
+    "• Processed 10M+ events/day",
+    "",
+    "EXPERIENCE",
+    "Senior Engineer | Stripe | 2020-Present",
+  ],
+  non_technical_resume: [
+    "ALEX JOHNSON",
+    "New York, NY | alex@example.com",
+    "",
+    "PROFESSIONAL SUMMARY",
+    "Strategic business leader with 10+ years...",
+    "",
+    "EXPERIENCE",
+    "Director of BD | Salesforce | 2019-Present",
+    "• Grew accounts from $5M to $25M ARR",
+    "• Led team of 12 account executives",
+    "",
+    "KEY ACHIEVEMENTS",
+    "• Presidents Club Winner 2022, 2023",
+    "",
+    "CORE COMPETENCIES",
+    "Strategic Planning | Team Leadership",
+  ],
+}
 
 export default function TemplatesPage() {
+  // Template gallery state
+  const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplateType>("technical_resume")
+  
   // Banned phrases state
   const [customBannedPhrases, setCustomBannedPhrases] = useState<string[]>([])
   const [newPhrase, setNewPhrase] = useState("")
@@ -126,25 +202,160 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="banned" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="gallery" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="gallery" className="flex items-center gap-2">
+            <LayoutGrid className="h-4 w-4" />
+            Templates
+          </TabsTrigger>
           <TabsTrigger value="banned" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
             Banned Phrases
           </TabsTrigger>
           <TabsTrigger value="scoring" className="flex items-center gap-2">
             <Scale className="h-4 w-4" />
-            Scoring Weights
+            Scoring
           </TabsTrigger>
           <TabsTrigger value="resume" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            Resume Rules
+            Resume
           </TabsTrigger>
           <TabsTrigger value="cover" className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
             Cover Letter
           </TabsTrigger>
         </TabsList>
+
+        {/* Template Gallery Tab */}
+        <TabsContent value="gallery" className="space-y-6">
+          {/* Template Cards */}
+          <div className="grid gap-6 lg:grid-cols-3">
+            {Object.values(RESUME_TEMPLATES).map((template) => {
+              const isSelected = selectedTemplate === template.id
+              
+              return (
+                <Card 
+                  key={template.id}
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${
+                    isSelected ? "ring-2 ring-primary ring-offset-2" : ""
+                  }`}
+                  onClick={() => setSelectedTemplate(template.id)}
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="p-3 rounded-xl bg-muted">
+                        {TEMPLATE_ICONS[template.id]}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                          <Zap className="h-3 w-3 mr-1" />
+                          ATS Safe
+                        </Badge>
+                        {template.multiPage && (
+                          <Badge variant="outline" className="text-xs">
+                            Multi-page
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <CardTitle className="text-xl mt-4">{template.name}</CardTitle>
+                    <CardDescription className="text-sm">{template.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Best for:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {template.bestFor.slice(0, 4).map((role) => (
+                          <Badge key={role} variant="outline" className="text-xs font-normal">
+                            {role}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Selected Template Preview */}
+          <Card className="overflow-hidden">
+            <CardHeader className="bg-muted/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {TEMPLATE_ICONS[selectedTemplate]}
+                  <div>
+                    <CardTitle>{RESUME_TEMPLATES[selectedTemplate].name} Preview</CardTitle>
+                    <CardDescription>
+                      See how your resume will look with this template
+                    </CardDescription>
+                  </div>
+                </div>
+                <Link href="/profile">
+                  <Button size="sm" className="gap-2">
+                    Use This Template
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="grid lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x">
+                {/* Preview */}
+                <div className="p-6">
+                  <div className="bg-white border rounded-lg shadow-sm p-6 font-mono text-xs leading-relaxed">
+                    {TEMPLATE_PREVIEWS[selectedTemplate].map((line, i) => (
+                      <div key={i} className={line === "" ? "h-3" : ""}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Template Details */}
+                <div className="p-6 space-y-6">
+                  <div>
+                    <h3 className="font-medium mb-3">Section Order</h3>
+                    <ol className="space-y-2">
+                      {getSectionOrder(selectedTemplate).slice(0, 8).map((section, index) => (
+                        <li key={section} className="flex items-center gap-3 text-sm">
+                          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-muted text-xs font-medium">
+                            {index + 1}
+                          </span>
+                          <span className="capitalize">{section.replace(/_/g, " ")}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <h3 className="font-medium mb-3">ATS Features</h3>
+                    <ul className="space-y-2">
+                      <li className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        Standard section headings
+                      </li>
+                      <li className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        Single-column layout
+                      </li>
+                      <li className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        No tables or graphics
+                      </li>
+                      <li className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        Keyword-optimized bullets
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Banned Phrases Tab */}
         <TabsContent value="banned" className="space-y-6">
