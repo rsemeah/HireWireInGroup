@@ -43,6 +43,7 @@ import {
   Clock,
 } from "lucide-react"
 import { toast } from "sonner"
+import { ExportButtons } from "@/components/export-buttons"
 
 // Available status transitions
 const STATUS_OPTIONS: JobStatus[] = [
@@ -473,12 +474,27 @@ export function JobDetail({ job }: JobDetailProps) {
                 </Button>
               </Link>
             ) : (
-              <Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90">
+<Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90">
                 <Send className="mr-2 h-4 w-4" />
                 Apply Now
               </Button>
-            )}
-            <Button variant="outline" onClick={() => handleStatusChange("ARCHIVED")}>
+              )}
+              
+              {/* Export Buttons */}
+              {(hasResume || hasCoverLetter) && (
+                <ExportButtons
+                  jobId={job.id}
+                  hasResume={hasResume}
+                  hasCoverLetter={hasCoverLetter}
+                  resumeText={job.generated_resume || undefined}
+                  coverLetterText={job.generated_cover_letter || undefined}
+                  candidateName="Candidate"
+                  company={job.company}
+                  role={job.title}
+                />
+              )}
+              
+              <Button variant="outline" onClick={() => handleStatusChange("ARCHIVED")}>
               <Save className="mr-2 h-4 w-4" />
               Save for Later
             </Button>
@@ -860,14 +876,15 @@ export function JobDetail({ job }: JobDetailProps) {
                   <CardDescription>ATS-optimized for this specific role</CardDescription>
                 </div>
                 {hasResume && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(job.generated_resume!, "Resume")}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy
-                  </Button>
+                  <ExportButtons
+                    jobId={job.id}
+                    hasResume={hasResume}
+                    hasCoverLetter={false}
+                    resumeText={job.generated_resume || undefined}
+                    candidateName="Candidate"
+                    company={job.company}
+                    role={job.title}
+                  />
                 )}
               </div>
             </CardHeader>
@@ -904,14 +921,15 @@ export function JobDetail({ job }: JobDetailProps) {
                   <CardDescription>Personalized for this company and role</CardDescription>
                 </div>
                 {hasCoverLetter && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(job.generated_cover_letter!, "Cover letter")}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy
-                  </Button>
+                  <ExportButtons
+                    jobId={job.id}
+                    hasResume={false}
+                    hasCoverLetter={hasCoverLetter}
+                    coverLetterText={job.generated_cover_letter || undefined}
+                    candidateName="Candidate"
+                    company={job.company}
+                    role={job.title}
+                  />
                 )}
               </div>
             </CardHeader>
