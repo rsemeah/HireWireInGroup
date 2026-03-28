@@ -18,7 +18,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isMagicLinkSent, setIsMagicLinkSent] = useState(false)
-  const [authMode, setAuthMode] = useState<"password" | "magic">("magic")
+  const [authMode, setAuthMode] = useState<"password" | "magic">("password")
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirect") || "/"
@@ -196,7 +196,7 @@ function LoginForm() {
               </p>
             )}
 
-            <Button type="submit" className="w-full h-11" disabled={isLoading}>
+            <Button type="submit" className="w-full h-11 font-semibold" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -205,7 +205,7 @@ function LoginForm() {
               ) : authMode === "magic" ? (
                 "Send magic link"
               ) : (
-                "Sign in"
+                "Log in"
               )}
             </Button>
           </div>
@@ -216,7 +216,7 @@ function LoginForm() {
           className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => setAuthMode(authMode === "magic" ? "password" : "magic")}
         >
-          {authMode === "magic" ? "Use password instead" : "Use magic link instead"}
+          {authMode === "magic" ? "Log in with password" : "Log in with magic link"}
         </button>
 
         <p className="text-center text-sm text-muted-foreground">
