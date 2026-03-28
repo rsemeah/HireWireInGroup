@@ -393,12 +393,7 @@ export function JobDetail({ job }: JobDetailProps) {
             <div className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
               <span suppressHydrationWarning>
-                {new Date(job.created_at).toLocaleDateString("en-US", { 
-                  timeZone: "UTC",
-                  month: "short", 
-                  day: "numeric", 
-                  year: "numeric" 
-                })}
+                {job.created_at?.split("T")[0] || "Unknown"}
               </span>
             </div>
           </div>

@@ -17,6 +17,14 @@ import {
   type BulletProvenance,
   type ParagraphProvenance,
 } from "@/lib/truthserum"
+import {
+  runPreGenerationEnhancement,
+  generateProjectsSection,
+} from "@/lib/bullet-enhancer"
+import {
+  extractKnownProducts,
+  buildProfileKnowledge,
+} from "@/lib/profile-knowledge-resolver"
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -410,6 +418,45 @@ the bullets, not reduced to "managed team and budget."
 Generate 5-8 strong achievement bullets with full provenance. More bullets is better if the evidence supports it.`,
     })
 
+    // Step 2.5: PRE-GENERATION ENHANCEMENT PASS
+    // Strengthen bullets with known profile data before final formatting
+    const { enhancedBullets, report: enhancementReport } = await runPreGenerationEnhancement(
+      resumeWithProvenance.experience_bullets.map((b: {
+        bullet_text: string
+        source_evidence_id: string
+        source_role: string
+        source_company: string
+        matched_requirement?: string
+        keywords_used: string[]
+      }) => ({
+        bullet_text: b.bullet_text,
+        source_evidence_id: b.source_evidence_id,
+        source_role: b.source_role,
+        source_company: b.source_company,
+        matched_requirement: b.matched_requirement,
+        keywords_used: b.keywords_used,
+      })),
+      {
+        full_name: profile.full_name,
+        email: profile.email,
+        phone: profile.phone,
+        location: profile.location,
+        summary: profile.summary,
+        skills: profile.skills,
+        links: profile.links as { portfolio?: string; linkedin?: string; github?: string } | undefined,
+        experience: (profile.experience || []).map((exp: { title?: string; company?: string; description?: string }) => ({
+          title: exp.title || "",
+          company: exp.company || "",
+          description: exp.description,
+        })),
+      },
+      evidence
+    )
+
+    // Generate Selected Products section if we have named products with artifacts
+    const knownProducts = extractKnownProducts(evidence)
+    const projectsSection = generateProjectsSection(knownProducts, 3)
+
     // Step 3: Generate cover letter with paragraph provenance
     const { object: coverLetterWithProvenance } = await generateObject({
       model: groq("llama-3.3-70b-versatile"),
@@ -458,9 +505,9 @@ Structure:
       profile.phone
     ].filter(Boolean).join(" | ")
     
-    // Group experience bullets by company if we have the info
-    const experienceBullets = resumeWithProvenance.experience_bullets
-      .map((b: { bullet_text: string }) => `• ${b.bullet_text}`)
+    // Use ENHANCED bullets (with product names, metrics, context injected)
+    const experienceBullets = enhancedBullets
+      .map(b => `• ${b.bullet_text}`)
       .join("\n")
     
     // Build premium formatted resume
@@ -479,7 +526,10 @@ PROFESSIONAL EXPERIENCE
 ${experienceBullets}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+${projectsSection ? `
+${projectsSection}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+` : ""}
 CORE COMPETENCIES
 ${resumeWithProvenance.skills_section.join(" | ")}
 
@@ -718,6 +768,28 @@ Be strict - flag anything that seems fabricated or generic.`,
         },
         suggestions: qualityCheck.improvement_suggestions,
       },
+      enhancement_report: {
+        total_bullets: enhancementReport.totalBullets,
+        auto_fixed: enhancementReport.autoFixed,
+        needs_review: enhancementReport.needsReview,
+        unchanged: enhancementReport.unchanged,
+        enhanced_bullets: enhancementReport.enhancedBullets
+          .filter(b => b.wasEnhanced)
+          .map(b => ({
+            original: b.originalText,
+            enhanced: b.enhancedText,
+            type: b.enhancementType,
+            product_added: b.namedProduct,
+            metric_added: b.addedMetric,
+            context_added: b.addedContext,
+          })),
+      },
+      known_products: knownProducts.map(p => ({
+        name: p.name,
+        has_website: !!p.website,
+        has_github: !!p.github,
+        confidence: p.confidence,
+      })),
     })
   } catch (error) {
     console.error("Error in generate-documents:", error)
