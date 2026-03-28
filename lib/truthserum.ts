@@ -88,9 +88,26 @@ export interface RedTeamIssue {
 }
 
 export interface RedTeamFix {
-  action: "rewrite_bullet" | "swap_evidence" | "add_metric" | "remove_phrase" | "make_concrete" | "block_claim" | "regenerate_section"
+  action: 
+    | "rewrite_bullet" 
+    | "swap_evidence" 
+    | "add_metric" 
+    | "remove_phrase" 
+    | "make_concrete" 
+    | "block_claim" 
+    | "regenerate_section"
+    // New auto-fix actions from profile knowledge
+    | "auto_fix_from_profile"
+    | "use_known_product_name"
+    | "attach_known_repo"
+    | "attach_known_website"
+    | "use_stored_metric"
+    | "request_missing_proof"
   label: string
   description: string
+  canAutoFix?: boolean // Whether this fix can be applied automatically
+  confidence?: "high" | "medium" | "low"
+  sourceEvidence?: string // Evidence ID that supports this fix
 }
 
 // ============================================================================

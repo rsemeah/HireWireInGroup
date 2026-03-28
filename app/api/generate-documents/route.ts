@@ -17,6 +17,19 @@ import {
   type BulletProvenance,
   type ParagraphProvenance,
 } from "@/lib/truthserum"
+import {
+  runPreGenerationEnhancement,
+  generateProjectsSection,
+} from "@/lib/bullet-enhancer"
+import {
+  extractKnownProducts,
+  buildProfileKnowledge,
+} from "@/lib/profile-knowledge-resolver"
+import {
+  suggestTemplate,
+  RESUME_TEMPLATES,
+  getTemplateGuidance,
+} from "@/lib/resume-templates"
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -31,12 +44,12 @@ const EvidenceMapSchema = z.object({
     company: z.string(),
     relevance: z.string().describe("How this experience relates to the job"),
     key_achievements: z.array(z.string()),
-    evidence_id: z.string().optional().describe("ID of the source evidence if available"),
+    evidence_id: z.string().optional().nullable().describe("ID of the source evidence if available"),
   })).describe("Work experiences that are relevant to this job"),
   matched_projects: z.array(z.object({
     project_name: z.string(),
     relevance: z.string(),
-    evidence_id: z.string().optional(),
+    evidence_id: z.string().optional().nullable(),
   })).describe("Projects that demonstrate relevant skills"),
   gaps: z.array(z.string()).describe("Required qualifications the candidate may not have"),
   fit_score: z.number().min(0).max(100).describe("Overall fit score 0-100"),
@@ -163,7 +176,9 @@ Return an error explaining why generation was blocked.`
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { job_id, selected_evidence_ids } = body
+    const { job_id, selected_evidence_ids, _retry_count = 0 } = body
+    const isRetry = _retry_count > 0
+    const MAX_RETRIES = 1 // Auto-retry once if quality check fails
 
     if (!job_id) {
       return NextResponse.json(
@@ -180,6 +195,17 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient()
+
+    // Set status to 'generating' immediately
+    await supabase
+      .from("jobs")
+      .update({ 
+        generation_status: "generating",
+        generation_error: null,
+        generation_attempts: _retry_count + 1,
+        last_generation_at: new Date().toISOString()
+      })
+      .eq("id", job_id)
 
     // Load all required data in parallel
     const [profile, allEvidence, jobData] = await Promise.all([
@@ -360,6 +386,16 @@ Be conservative - only include matches that are clearly supported by the evidenc
 
     const strategyPrompt = buildStrategyPrompt(strategy)
 
+    // Auto-select optimal resume template based on job analysis
+    const selectedTemplate = suggestTemplate({
+      title: jobData.title,
+      role_family: jobData.role_family,
+      responsibilities: jobData.responsibilities,
+      qualifications_required: jobData.qualifications_required,
+    })
+    const templateConfig = RESUME_TEMPLATES[selectedTemplate]
+    const templateGuidance = getTemplateGuidance(selectedTemplate)
+
     // Step 2: Generate resume with bullet-level provenance
     const { object: resumeWithProvenance } = await generateObject({
       model: groq("llama-3.3-70b-versatile"),
@@ -376,6 +412,13 @@ MATCHED EVIDENCE:
 - Matched Skills: ${evidenceMap.matched_skills.join(", ")}
 - Matched Tools: ${evidenceMap.matched_tools.join(", ")}
 - Key Gaps to Address: ${evidenceMap.gaps.join(", ")}
+
+RESUME TEMPLATE: ${templateConfig.name}
+${templateGuidance}
+Emphasis areas: ${templateConfig.emphasisAreas.join(", ")}
+${selectedTemplate === "technical_resume" ? "TECH FOCUS: Lead with technical skills, projects, and measurable engineering impact." : ""}
+${selectedTemplate === "professional_cv" ? "CV FOCUS: Emphasize credentials, publications, and leadership scope." : ""}
+${selectedTemplate === "non_technical_resume" ? "BUSINESS FOCUS: Emphasize stakeholder impact, revenue/growth metrics, and leadership." : ""}
 
 ${strategyPrompt}
 
@@ -407,6 +450,45 @@ the bullets, not reduced to "managed team and budget."
 
 Generate 5-8 strong achievement bullets with full provenance. More bullets is better if the evidence supports it.`,
     })
+
+    // Step 2.5: PRE-GENERATION ENHANCEMENT PASS
+    // Strengthen bullets with known profile data before final formatting
+    const { enhancedBullets, report: enhancementReport } = await runPreGenerationEnhancement(
+      resumeWithProvenance.experience_bullets.map((b: {
+        bullet_text: string
+        source_evidence_id: string
+        source_role: string
+        source_company: string
+        matched_requirement?: string
+        keywords_used: string[]
+      }) => ({
+        bullet_text: b.bullet_text,
+        source_evidence_id: b.source_evidence_id,
+        source_role: b.source_role,
+        source_company: b.source_company,
+        matched_requirement: b.matched_requirement,
+        keywords_used: b.keywords_used,
+      })),
+      {
+        full_name: profile.full_name,
+        email: profile.email,
+        phone: profile.phone,
+        location: profile.location,
+        summary: profile.summary,
+        skills: profile.skills,
+        links: profile.links as { portfolio?: string; linkedin?: string; github?: string } | undefined,
+        experience: (profile.experience || []).map((exp: { title?: string; company?: string; description?: string }) => ({
+          title: exp.title || "",
+          company: exp.company || "",
+          description: exp.description,
+        })),
+      },
+      evidence
+    )
+
+    // Generate Selected Products section if we have named products with artifacts
+    const knownProducts = extractKnownProducts(evidence)
+    const projectsSection = generateProjectsSection(knownProducts, 3)
 
     // Step 3: Generate cover letter with paragraph provenance
     const { object: coverLetterWithProvenance } = await generateObject({
@@ -449,28 +531,63 @@ Structure:
 - Paragraph 4: Brief closing with next steps`,
     })
 
-    // Build final formatted documents
-    const formattedResume = `${profile.full_name || "CANDIDATE NAME"}
-${profile.location || "Location"} | ${profile.email || "email@example.com"}
+    // Build final formatted documents - Premium Clean Minimalist format
+    const contactInfo = [
+      profile.location,
+      profile.email,
+      profile.phone
+    ].filter(Boolean).join(" | ")
+    
+    // Use ENHANCED bullets (with product names, metrics, context injected)
+    const experienceBullets = enhancedBullets
+      .map(b => `• ${b.bullet_text}`)
+      .join("\n")
+    
+    // Build premium formatted resume
+    const formattedResume = `${(profile.full_name || "CANDIDATE NAME").toUpperCase()}
+${contactInfo}
 
-SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROFESSIONAL SUMMARY
 ${resumeWithProvenance.summary}
 
-EXPERIENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${resumeWithProvenance.experience_bullets.map(b => 
-  `• ${b.bullet_text}`
-).join("\n")}
+PROFESSIONAL EXPERIENCE
 
-SKILLS
-${resumeWithProvenance.skills_section.join(", ")}
+${experienceBullets}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${projectsSection ? `
+${projectsSection}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+` : ""}
+CORE COMPETENCIES
+${resumeWithProvenance.skills_section.join(" | ")}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 EDUCATION
 ${(profile.education || []).map((edu: { degree: string; school: string; year?: string }) => 
-  `${edu.degree} | ${edu.school}${edu.year ? ` | ${edu.year}` : ""}`
+  `${edu.degree} — ${edu.school}${edu.year ? ` (${edu.year})` : ""}`
 ).join("\n")}`
 
-    const formattedCoverLetter = coverLetterWithProvenance.paragraphs.map(p => p.paragraph_text).join("\n\n")
+    // Build premium formatted cover letter
+    const today = new Date().toLocaleDateString("en-US", { 
+      month: "long", 
+      day: "numeric", 
+      year: "numeric" 
+    })
+    
+    const formattedCoverLetter = `${today}
+
+Dear Hiring Manager,
+
+${coverLetterWithProvenance.paragraphs.map(p => p.paragraph_text).join("\n\n")}
+
+Sincerely,
+${profile.full_name || "Candidate"}`
 
     // Step 4: Detect banned phrases and vague patterns
     const resumeBannedPhrases = detectBannedPhrases(formattedResume)
@@ -551,6 +668,31 @@ Be strict - flag anything that seems fabricated or generic.`,
       (qualityCheck.vague_bullets.length * 5)
     )
 
+    // AUTO-RETRY: If quality check fails and we haven't retried yet, regenerate
+    const hasSignificantIssues = 
+      allBannedPhrases.length > 0 || 
+      qualityCheck.invented_claims.length > 0 ||
+      weakBullets.length > 2
+
+    if (!qualityPassed && hasSignificantIssues && _retry_count < MAX_RETRIES) {
+      // Auto-retry: Quality check failed, regenerating with stricter prompts
+      
+      // Recursive call with incremented retry count
+      const retryBody = JSON.stringify({
+        job_id,
+        selected_evidence_ids,
+        _retry_count: _retry_count + 1
+      })
+      
+      const retryRequest = new NextRequest(request.url, {
+        method: "POST",
+        body: retryBody,
+        headers: { "Content-Type": "application/json" }
+      })
+      
+      return POST(retryRequest)
+    }
+
     // Update the job with generated materials
     const { error: updateError } = await supabase
       .from("jobs")
@@ -578,6 +720,8 @@ Be strict - flag anything that seems fabricated or generic.`,
         status: "SCORED",
         scored_at: new Date().toISOString(),
         generation_timestamp: new Date().toISOString(),
+        generation_status: qualityPassed ? "ready" : "needs_review",
+        generation_error: null,
         generation_quality_score: qualityScore,
         generation_quality_issues: [
           ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
@@ -625,8 +769,12 @@ Be strict - flag anything that seems fabricated or generic.`,
     return NextResponse.json({
       success: true,
       job_id,
+      was_auto_retried: isRetry,
+      retry_count: _retry_count,
       strategy,
       strategy_reasoning: strategyReasoning,
+      template_used: selectedTemplate,
+      template_name: templateConfig.name,
       evidence_map: {
         fit_score: evidenceMap.fit_score,
         fit_rationale: evidenceMap.fit_rationale,
@@ -657,6 +805,28 @@ Be strict - flag anything that seems fabricated or generic.`,
         },
         suggestions: qualityCheck.improvement_suggestions,
       },
+      enhancement_report: {
+        total_bullets: enhancementReport.totalBullets,
+        auto_fixed: enhancementReport.autoFixed,
+        needs_review: enhancementReport.needsReview,
+        unchanged: enhancementReport.unchanged,
+        enhanced_bullets: enhancementReport.enhancedBullets
+          .filter(b => b.wasEnhanced)
+          .map(b => ({
+            original: b.originalText,
+            enhanced: b.enhancedText,
+            type: b.enhancementType,
+            product_added: b.namedProduct,
+            metric_added: b.addedMetric,
+            context_added: b.addedContext,
+          })),
+      },
+      known_products: knownProducts.map(p => ({
+        name: p.name,
+        has_website: !!p.website,
+        has_github: !!p.github,
+        confidence: p.confidence,
+      })),
     })
   } catch (error) {
     console.error("Error in generate-documents:", error)
@@ -664,6 +834,23 @@ Be strict - flag anything that seems fabricated or generic.`,
     // Check for rate limit errors
     const errorMessage = error instanceof Error ? error.message : "Generation failed"
     const isRateLimit = errorMessage.includes("rate_limit") || errorMessage.includes("Rate limit") || errorMessage.includes("429")
+    
+    // Try to update job status to failed (best effort, don't fail if this fails)
+    try {
+      const { job_id } = await request.clone().json()
+      if (job_id) {
+        const supabase = createAdminClient()
+        await supabase
+          .from("jobs")
+          .update({ 
+            generation_status: "failed",
+            generation_error: errorMessage
+          })
+          .eq("id", job_id)
+      }
+    } catch {
+      // Ignore errors updating status
+    }
     
     if (isRateLimit) {
       return NextResponse.json(

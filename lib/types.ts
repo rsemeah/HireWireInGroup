@@ -9,6 +9,128 @@
  */
 
 // ============================================================================
+// RESUME TEMPLATE TYPES
+// ============================================================================
+
+export const RESUME_TEMPLATE_TYPES = [
+  "professional_cv",
+  "technical_resume", 
+  "non_technical_resume",
+] as const
+
+export type ResumeTemplateType = typeof RESUME_TEMPLATE_TYPES[number]
+
+export interface ResumeTemplateConfig {
+  id: ResumeTemplateType
+  name: string
+  description: string
+  bestFor: string[]
+  sections: string[]
+  atsOptimized: boolean
+  multiPage: boolean
+  emphasisAreas: string[]
+  scoringWeights: {
+    technical_skills: number
+    experience: number
+    education: number
+    projects: number
+    achievements: number
+    certifications: number
+  }
+}
+
+// ============================================================================
+// GENERATION STATUS
+// ============================================================================
+
+export type GenerationStatus = 
+  | "pending"      // Ready to generate (has analysis, no materials)
+  | "generating"   // Currently generating (in progress)
+  | "ready"        // Materials available for download
+  | "failed"       // Error occurred during generation
+  | "needs_review" // Generated but has quality issues
+
+// ============================================================================
+// EXTENDED PROFILE FOR MULTI-TEMPLATE SUPPORT
+// ============================================================================
+
+export interface TechnicalSkillGroup {
+  category: "Languages" | "Frameworks" | "Cloud" | "Data" | "Tools" | "Other"
+  skills: string[]
+}
+
+export interface Project {
+  id: string
+  title: string
+  description: string
+  tech_stack: string[]
+  impact: string
+  url?: string
+  github_url?: string
+  start_date?: string
+  end_date?: string
+}
+
+export interface Publication {
+  id: string
+  title: string
+  venue: string
+  date: string
+  url?: string
+  co_authors?: string[]
+  type: "journal" | "conference" | "book_chapter" | "whitepaper" | "other"
+}
+
+export interface Presentation {
+  id: string
+  title: string
+  event: string
+  date: string
+  url?: string
+}
+
+export interface Award {
+  id: string
+  title: string
+  issuer: string
+  date: string
+  description?: string
+}
+
+export interface Certification {
+  id: string
+  name: string
+  issuer: string
+  date_obtained: string
+  expiry_date?: string
+  credential_id?: string
+  url?: string
+}
+
+export interface ExtendedUserProfile extends UserProfile {
+  // Technical-specific
+  technical_skills: TechnicalSkillGroup[]
+  projects: Project[]
+  github_url?: string
+  portfolio_url?: string
+  linkedin_url?: string
+  
+  // CV-specific
+  publications: Publication[]
+  presentations: Presentation[]
+  research_interests?: string[]
+  affiliations?: string[]
+  awards: Award[]
+  
+  // Non-technical specific
+  leadership_highlights?: string[]
+  stakeholder_achievements?: string[]
+  
+  // Preferences
+  preferred_template?: ResumeTemplateType
+}
+
+// ============================================================================
 // ROLE FAMILIES (for categorization and tailoring)
 // ============================================================================
 
@@ -130,6 +252,12 @@ export interface Job {
   generated_resume?: string | null
   generated_cover_letter?: string | null
   generation_timestamp?: string | null
+  
+  // Generation status tracking
+  generation_status?: GenerationStatus | null
+  generation_error?: string | null
+  generation_attempts?: number | null
+  last_generation_at?: string | null
   
   // Quality tracking
   generation_quality_score?: number | null

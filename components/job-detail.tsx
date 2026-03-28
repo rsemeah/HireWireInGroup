@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import type { Job, JobStatus, JobFit, RoleFamily } from "@/lib/types"
+import type { Job, JobStatus, JobFit, RoleFamily, GenerationStatus } from "@/lib/types"
 import { STATUS_CONFIG, FIT_CONFIG, ROLE_FAMILIES } from "@/lib/types"
 import { updateJobStatus } from "@/lib/actions/jobs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,8 +41,10 @@ import {
   Lock,
   AlertTriangle,
   Clock,
+  MessageSquare,
 } from "lucide-react"
 import { toast } from "sonner"
+import { ExportButtons } from "@/components/export-buttons"
 
 // Available status transitions
 const STATUS_OPTIONS: JobStatus[] = [
@@ -108,12 +110,13 @@ function WorkflowStepCard({
   description: string
   status: WorkflowStatus
   statusReason: string
-  color: "blue" | "green" | "red"
+  color: "blue" | "green" | "red" | "purple"
 }) {
   const colorClasses = {
     blue: { bg: "bg-blue-100", text: "text-blue-600", border: "border-blue-200" },
     green: { bg: "bg-green-100", text: "text-green-600", border: "border-green-200" },
     red: { bg: "bg-red-100", text: "text-red-600", border: "border-red-200" },
+    purple: { bg: "bg-purple-100", text: "text-purple-600", border: "border-purple-200" },
   }
 
   const statusConfig = {
@@ -147,11 +150,130 @@ function WorkflowStepCard({
   )
 }
 
+// Generation status banner with retry button
+function GenerationStatusBanner({ 
+  status, 
+  error, 
+  attempts,
+  onRetry,
+  isRetrying 
+}: { 
+  status: GenerationStatus | null | undefined
+  error: string | null | undefined
+  attempts: number | null | undefined
+  onRetry: () => void
+  isRetrying: boolean
+}) {
+  if (!status) return null
+  
+  const configs: Record<GenerationStatus, {
+    icon: typeof CheckCircle2
+    className: string
+    bgClassName: string
+    label: string
+    showRetry: boolean
+  }> = {
+    pending: {
+      icon: Clock,
+      className: "text-blue-600",
+      bgClassName: "bg-blue-50 border-blue-200",
+      label: "Ready to generate materials",
+      showRetry: false,
+    },
+    generating: {
+      icon: Loader2,
+      className: "text-blue-600 animate-spin",
+      bgClassName: "bg-blue-50 border-blue-200",
+      label: "Generating resume and cover letter...",
+      showRetry: false,
+    },
+    ready: {
+      icon: CheckCircle2,
+      className: "text-green-600",
+      bgClassName: "bg-green-50 border-green-200",
+      label: "Materials ready for download",
+      showRetry: false,
+    },
+    failed: {
+      icon: XCircle,
+      className: "text-red-600",
+      bgClassName: "bg-red-50 border-red-200",
+      label: error || "Generation failed",
+      showRetry: true,
+    },
+    needs_review: {
+      icon: AlertTriangle,
+      className: "text-amber-600",
+      bgClassName: "bg-amber-50 border-amber-200",
+      label: "Materials generated but have quality issues",
+      showRetry: true,
+    },
+  }
+  
+  const config = configs[status]
+  const StatusIcon = config.icon
+  
+  return (
+    <div className={`p-4 rounded-lg border flex items-center justify-between ${config.bgClassName}`}>
+      <div className="flex items-center gap-3">
+        <StatusIcon className={`h-5 w-5 ${config.className}`} />
+        <div>
+          <p className={`font-medium ${config.className}`}>{config.label}</p>
+          {attempts && attempts > 1 && (
+            <p className="text-xs text-muted-foreground">
+              Attempted {attempts} time{attempts > 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
+      </div>
+      {config.showRetry && (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onRetry}
+          disabled={isRetrying}
+          className="gap-2"
+        >
+          {isRetrying ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {isRetrying ? "Retrying..." : "Retry Generation"}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function JobDetail({ job }: JobDetailProps) {
   const router = useRouter()
   const [status, setStatus] = useState<JobStatus>(job.status)
   const [isPending, startTransition] = useTransition()
   const [isGenerating, setIsGenerating] = useState(false)
+  const [candidateName, setCandidateName] = useState("Candidate")
+
+  // Load candidate name from profile
+  useEffect(() => {
+    async function loadProfile() {
+      try {
+        const { createBrowserClient } = await import("@/lib/supabase/client")
+        const supabase = createBrowserClient()
+        const { data } = await supabase
+          .from("user_profile")
+          .select("full_name")
+          .limit(1)
+          .maybeSingle()
+        
+        if (data?.full_name) {
+          setCandidateName(data.full_name)
+        }
+      } catch (error) {
+        // Silently fail, use default
+      }
+    }
+    loadProfile()
+  }, [])
 
   // Computed states
   const hasResume = !!job.generated_resume
@@ -207,10 +329,16 @@ export function JobDetail({ job }: JobDetailProps) {
           data.strategy === "adjacent_transition" ? "Adjacent Transition" :
           data.strategy === "stretch_honest" ? "Stretch Fit" : data.strategy
         
+        // Check if quality passed and if auto-retry was needed
+        const wasRetried = data.was_auto_retried
+        const qualityPassed = data.quality_check?.passed
+        
         toast.success(`Materials generated (${strategyLabel})`, {
-          description: data.quality_check?.passed 
-            ? "Quality checks passed"
-            : `${data.quality_check?.issues?.banned_phrases?.length || 0} issues to review`
+          description: wasRetried 
+            ? "Auto-improved after quality check" 
+            : qualityPassed 
+              ? "Quality checks passed"
+              : `${data.quality_check?.issues?.banned_phrases?.length || 0} issues to review`
         })
         router.refresh()
       } else {
@@ -360,7 +488,9 @@ export function JobDetail({ job }: JobDetailProps) {
             )}
             <div className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
-              <span>{new Date(job.created_at).toLocaleDateString()}</span>
+              <span suppressHydrationWarning>
+                {job.created_at?.split("T")[0] || "Unknown"}
+              </span>
             </div>
           </div>
 
@@ -473,12 +603,27 @@ export function JobDetail({ job }: JobDetailProps) {
                 </Button>
               </Link>
             ) : (
-              <Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90">
+<Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90">
                 <Send className="mr-2 h-4 w-4" />
                 Apply Now
               </Button>
-            )}
-            <Button variant="outline" onClick={() => handleStatusChange("ARCHIVED")}>
+              )}
+              
+              {/* Export Buttons */}
+              {(hasResume || hasCoverLetter) && (
+                <ExportButtons
+                  jobId={job.id}
+                  hasResume={hasResume}
+                  hasCoverLetter={hasCoverLetter}
+                  resumeText={job.generated_resume || undefined}
+                  coverLetterText={job.generated_cover_letter || undefined}
+                  candidateName={candidateName}
+                  company={job.company}
+                  role={job.title}
+                />
+              )}
+              
+              <Button variant="outline" onClick={() => handleStatusChange("ARCHIVED")}>
               <Save className="mr-2 h-4 w-4" />
               Save for Later
             </Button>
@@ -488,6 +633,14 @@ export function JobDetail({ job }: JobDetailProps) {
                 Regenerate
               </Button>
             )}
+            
+            {/* Interview Prep Button */}
+            <Link href={`/jobs/${job.id}/interview-prep`}>
+              <Button variant="outline">
+                <MessageSquare className="mr-2 h-4 w-4" />
+                Interview Prep
+              </Button>
+            </Link>
           </div>
         </CardContent>
       </Card>
@@ -568,7 +721,7 @@ export function JobDetail({ job }: JobDetailProps) {
             </div>
           )}
 
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             {/* Evidence Match Step */}
             <Link href={`/jobs/${job.id}/evidence-match`}>
               <WorkflowStepCard
@@ -635,6 +788,18 @@ export function JobDetail({ job }: JobDetailProps) {
                     : "Run quality review"
                 }
                 color="red"
+              />
+            </Link>
+            
+            {/* Interview Prep Step */}
+            <Link href={`/jobs/${job.id}/interview-prep`}>
+              <WorkflowStepCard
+                step={4}
+                title="Interview Prep"
+                description="Evidence-based interview coaching"
+                status={hasResume ? "not_started" : "not_started"}
+                statusReason={hasResume ? "Ready to generate prep" : "Generate materials first"}
+                color="purple"
               />
             </Link>
           </div>
@@ -852,7 +1017,16 @@ export function JobDetail({ job }: JobDetailProps) {
 
         {/* Resume Tab */}
         <TabsContent value="resume">
-          <Card>
+          {/* Generation Status Banner */}
+          <GenerationStatusBanner
+            status={job.generation_status}
+            error={job.generation_error}
+            attempts={job.generation_attempts}
+            onRetry={handleGenerateMaterials}
+            isRetrying={isGenerating}
+          />
+          
+          <Card className="mt-4">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -860,14 +1034,15 @@ export function JobDetail({ job }: JobDetailProps) {
                   <CardDescription>ATS-optimized for this specific role</CardDescription>
                 </div>
                 {hasResume && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(job.generated_resume!, "Resume")}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy
-                  </Button>
+                  <ExportButtons
+                    jobId={job.id}
+                    hasResume={hasResume}
+                    hasCoverLetter={false}
+                    resumeText={job.generated_resume || undefined}
+                    candidateName={candidateName}
+                    company={job.company}
+                    role={job.title}
+                  />
                 )}
               </div>
             </CardHeader>
@@ -904,14 +1079,15 @@ export function JobDetail({ job }: JobDetailProps) {
                   <CardDescription>Personalized for this company and role</CardDescription>
                 </div>
                 {hasCoverLetter && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(job.generated_cover_letter!, "Cover letter")}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy
-                  </Button>
+                  <ExportButtons
+                    jobId={job.id}
+                    hasResume={false}
+                    hasCoverLetter={hasCoverLetter}
+                    coverLetterText={job.generated_cover_letter || undefined}
+                    candidateName={candidateName}
+                    company={job.company}
+                    role={job.title}
+                  />
                 )}
               </div>
             </CardHeader>

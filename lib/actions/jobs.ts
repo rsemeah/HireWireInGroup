@@ -176,6 +176,9 @@ export async function generateDocumentsForJob(jobId: string): Promise<GenerateDo
 /**
  * Analyzes job and immediately generates documents.
  * Combined flow for single-click operation.
+ * 
+ * NOTE: The /api/analyze endpoint now handles generation internally,
+ * so this function just needs to call analyze and return the results.
  */
 export async function analyzeAndGenerateForJob(url: string): Promise<
   | {
@@ -187,58 +190,85 @@ export async function analyzeAndGenerateForJob(url: string): Promise<
     }
   | { success: false; error: string }
 > {
-  // Step 1: Analyze the job
-  const analyzeResult = await analyzeJobFromUrl(url)
-  
-  if (!analyzeResult.success) {
-    return { success: false, error: analyzeResult.error }
-  }
+  try {
+    const normalizedUrl = url.trim()
 
-  // If duplicate, return early
-  if (analyzeResult.duplicate) {
-    return {
-      success: true,
-      job: analyzeResult.job,
-      analysis: analyzeResult.analysis,
-      generation: null,
-      duplicate: true,
+    if (!normalizedUrl) {
+      return { success: false, error: "Please provide a job URL." }
     }
-  }
 
-  // Step 2: Generate documents
-  const generateResult = await generateDocumentsForJob(analyzeResult.job.id)
+    // Call the analyze API which now handles generation internally
+    const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+      : process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000"
 
-  if (!generateResult.success) {
-    // Still return success since job was analyzed, but note generation failed
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ job_url: normalizedUrl }),
+    })
+
+    const result = await response.json()
+
+    if (!result.success) {
+      return { success: false, error: result.error || "Analysis failed" }
+    }
+
+    revalidatePath("/")
+    revalidatePath("/jobs")
+    revalidatePath("/ready-queue")
+    if (result.job_id) {
+      revalidatePath(`/jobs/${result.job_id}`)
+    }
+
+    // If duplicate, return early
+    if (result.duplicate) {
+      return {
+        success: true,
+        job: result.job,
+        analysis: result.analysis,
+        generation: null,
+        duplicate: true,
+      }
+    }
+
+    // Map the generation result from the API response
+    const generation = result.generation?.success && result.job?.generated_resume ? {
+      job_id: result.job_id,
+      evidence_map: {
+        fit_score: result.job?.score || 0,
+        fit_rationale: result.job?.score_reasoning || "",
+        matched_skills: result.job?.score_strengths || [],
+        matched_tools: result.analysis?.tech_stack || [],
+        gaps: result.job?.score_gaps || [],
+      },
+      generated_resume: result.job.generated_resume,
+      generated_cover_letter: result.job.generated_cover_letter || "",
+      quality_check: {
+        passed: result.job?.quality_passed || false,
+        issues: {
+          invented_claims: [],
+          vague_bullets: [],
+          ai_filler: result.job?.generation_quality_issues || [],
+        },
+        suggestions: [],
+      },
+    } : null
+
     return {
       success: true,
-      job: analyzeResult.job,
-      analysis: analyzeResult.analysis,
-      generation: null,
+      job: result.job,
+      analysis: result.analysis,
+      generation,
       duplicate: false,
     }
-  }
-
-  // Fetch updated job with generated materials
-  const supabase = createAdminClient()
-  const { data: updatedJob } = await supabase
-    .from("jobs")
-    .select("*")
-    .eq("id", analyzeResult.job.id)
-    .single()
-
-  return {
-    success: true,
-    job: updatedJob || analyzeResult.job,
-    analysis: analyzeResult.analysis,
-    generation: {
-      job_id: generateResult.job_id,
-      evidence_map: generateResult.evidence_map,
-      generated_resume: generateResult.generated_resume,
-      generated_cover_letter: generateResult.generated_cover_letter,
-      quality_check: generateResult.quality_check,
-    },
-    duplicate: false,
+  } catch (err) {
+    console.error("Error in analyzeAndGenerateForJob:", err)
+    return { success: false, error: "Failed to analyze and generate" }
   }
 }
 
