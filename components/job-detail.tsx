@@ -233,10 +233,16 @@ export function JobDetail({ job }: JobDetailProps) {
           data.strategy === "adjacent_transition" ? "Adjacent Transition" :
           data.strategy === "stretch_honest" ? "Stretch Fit" : data.strategy
         
+        // Check if quality passed and if auto-retry was needed
+        const wasRetried = data.was_auto_retried
+        const qualityPassed = data.quality_check?.passed
+        
         toast.success(`Materials generated (${strategyLabel})`, {
-          description: data.quality_check?.passed 
-            ? "Quality checks passed"
-            : `${data.quality_check?.issues?.banned_phrases?.length || 0} issues to review`
+          description: wasRetried 
+            ? "Auto-improved after quality check" 
+            : qualityPassed 
+              ? "Quality checks passed"
+              : `${data.quality_check?.issues?.banned_phrases?.length || 0} issues to review`
         })
         router.refresh()
       } else {
@@ -386,7 +392,14 @@ export function JobDetail({ job }: JobDetailProps) {
             )}
             <div className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
-              <span suppressHydrationWarning>{new Date(job.created_at).toLocaleDateString()}</span>
+              <span suppressHydrationWarning>
+                {new Date(job.created_at).toLocaleDateString("en-US", { 
+                  timeZone: "UTC",
+                  month: "short", 
+                  day: "numeric", 
+                  year: "numeric" 
+                })}
+              </span>
             </div>
           </div>
 

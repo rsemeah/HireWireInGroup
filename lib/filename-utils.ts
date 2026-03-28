@@ -26,15 +26,16 @@ export interface FilenameParams {
 
 /**
  * Sanitizes a string for use in filenames.
- * - Replaces illegal characters with spaces
+ * - Replaces illegal characters
  * - Replaces multiple spaces with single space
  * - Trims whitespace
  * - Preserves readable capitalization
+ * - Optionally preserves spaces (for names) or converts to underscores (for roles/companies)
  */
-function sanitizeForFilename(input: string): string {
+function sanitizeForFilename(input: string, preserveSpaces: boolean = false): string {
   if (!input || typeof input !== "string") return ""
   
-  return input
+  let result = input
     // Replace illegal filename characters: / \ : * ? " < > | with space
     .replace(/[/\\:*?"<>|]/g, " ")
     // Replace other common special characters
@@ -45,20 +46,27 @@ function sanitizeForFilename(input: string): string {
     .replace(/\s+/g, " ")
     // Trim leading/trailing whitespace
     .trim()
-    // Replace remaining spaces with underscore for filename
-    .replace(/\s/g, "_")
-    // Remove multiple underscores
-    .replace(/_+/g, "_")
-    // Remove leading/trailing underscores
-    .replace(/^_+|_+$/g, "")
+  
+  if (!preserveSpaces) {
+    result = result
+      // Replace remaining spaces with underscore for filename
+      .replace(/\s/g, "_")
+      // Remove multiple underscores
+      .replace(/_+/g, "_")
+      // Remove leading/trailing underscores
+      .replace(/^_+|_+$/g, "")
+  }
+  
+  return result
 }
 
 /**
  * Formats candidate name for filename.
- * Keeps readable capitalization.
+ * Keeps readable capitalization and preserves spaces.
+ * Example: "Rory Semeah" stays as "Rory Semeah"
  */
 function formatCandidateName(name: string): string {
-  const sanitized = sanitizeForFilename(name)
+  const sanitized = sanitizeForFilename(name, true) // Preserve spaces in name
   if (!sanitized) return "Candidate"
   return sanitized
 }
@@ -105,7 +113,7 @@ function formatCompany(company: string | undefined): string {
  *   documentType: "resume",
  *   extension: "pdf"
  * })
- * // Returns: "Rory_Semeah_Senior_Product_Manager_OpenAI_Resume.pdf"
+ * // Returns: "Rory Semeah_Senior_Product_Manager_OpenAI_Resume.pdf"
  */
 export function generateDocumentFilename(params: FilenameParams): string {
   const {

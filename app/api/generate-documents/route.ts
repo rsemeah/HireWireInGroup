@@ -163,7 +163,9 @@ Return an error explaining why generation was blocked.`
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { job_id, selected_evidence_ids } = body
+    const { job_id, selected_evidence_ids, _retry_count = 0 } = body
+    const isRetry = _retry_count > 0
+    const MAX_RETRIES = 1 // Auto-retry once if quality check fails
 
     if (!job_id) {
       return NextResponse.json(
@@ -449,28 +451,60 @@ Structure:
 - Paragraph 4: Brief closing with next steps`,
     })
 
-    // Build final formatted documents
-    const formattedResume = `${profile.full_name || "CANDIDATE NAME"}
-${profile.location || "Location"} | ${profile.email || "email@example.com"}
+    // Build final formatted documents - Premium Clean Minimalist format
+    const contactInfo = [
+      profile.location,
+      profile.email,
+      profile.phone
+    ].filter(Boolean).join(" | ")
+    
+    // Group experience bullets by company if we have the info
+    const experienceBullets = resumeWithProvenance.experience_bullets
+      .map((b: { bullet_text: string }) => `• ${b.bullet_text}`)
+      .join("\n")
+    
+    // Build premium formatted resume
+    const formattedResume = `${(profile.full_name || "CANDIDATE NAME").toUpperCase()}
+${contactInfo}
 
-SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROFESSIONAL SUMMARY
 ${resumeWithProvenance.summary}
 
-EXPERIENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${resumeWithProvenance.experience_bullets.map(b => 
-  `• ${b.bullet_text}`
-).join("\n")}
+PROFESSIONAL EXPERIENCE
 
-SKILLS
-${resumeWithProvenance.skills_section.join(", ")}
+${experienceBullets}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CORE COMPETENCIES
+${resumeWithProvenance.skills_section.join(" | ")}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 EDUCATION
 ${(profile.education || []).map((edu: { degree: string; school: string; year?: string }) => 
-  `${edu.degree} | ${edu.school}${edu.year ? ` | ${edu.year}` : ""}`
+  `${edu.degree} — ${edu.school}${edu.year ? ` (${edu.year})` : ""}`
 ).join("\n")}`
 
-    const formattedCoverLetter = coverLetterWithProvenance.paragraphs.map(p => p.paragraph_text).join("\n\n")
+    // Build premium formatted cover letter
+    const today = new Date().toLocaleDateString("en-US", { 
+      month: "long", 
+      day: "numeric", 
+      year: "numeric" 
+    })
+    
+    const formattedCoverLetter = `${today}
+
+Dear Hiring Manager,
+
+${coverLetterWithProvenance.paragraphs.map(p => p.paragraph_text).join("\n\n")}
+
+Sincerely,
+${profile.full_name || "Candidate"}`
 
     // Step 4: Detect banned phrases and vague patterns
     const resumeBannedPhrases = detectBannedPhrases(formattedResume)
@@ -551,6 +585,31 @@ Be strict - flag anything that seems fabricated or generic.`,
       (qualityCheck.vague_bullets.length * 5)
     )
 
+    // AUTO-RETRY: If quality check fails and we haven't retried yet, regenerate
+    const hasSignificantIssues = 
+      allBannedPhrases.length > 0 || 
+      qualityCheck.invented_claims.length > 0 ||
+      weakBullets.length > 2
+
+    if (!qualityPassed && hasSignificantIssues && _retry_count < MAX_RETRIES) {
+      // Auto-retry: Quality check failed, regenerating with stricter prompts
+      
+      // Recursive call with incremented retry count
+      const retryBody = JSON.stringify({
+        job_id,
+        selected_evidence_ids,
+        _retry_count: _retry_count + 1
+      })
+      
+      const retryRequest = new NextRequest(request.url, {
+        method: "POST",
+        body: retryBody,
+        headers: { "Content-Type": "application/json" }
+      })
+      
+      return POST(retryRequest)
+    }
+
     // Update the job with generated materials
     const { error: updateError } = await supabase
       .from("jobs")
@@ -625,6 +684,8 @@ Be strict - flag anything that seems fabricated or generic.`,
     return NextResponse.json({
       success: true,
       job_id,
+      was_auto_retried: isRetry,
+      retry_count: _retry_count,
       strategy,
       strategy_reasoning: strategyReasoning,
       evidence_map: {
