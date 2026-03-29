@@ -8,7 +8,7 @@ import {
 import { createGroq } from "@ai-sdk/groq"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { checkSafety, logSafetyAudit } from "@/lib/safety"
+import { checkSafety, logSafetyAudit, sanitizeInput, quickRiskCheck } from "@/lib/safety"
 
 export const maxDuration = 60
 
@@ -274,32 +274,48 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // === SAFETY CHECK (Pre-flight gate) ===
-    const safetyResult = checkSafety(messages, user.id)
+    // === SAFETY CHECK (Pre-flight gate - comprehensive) ===
+    const safetyResult = checkSafety(messages, {
+      userId: user.id,
+      sessionId: conversationId,
+      strictMode: false, // Enable for higher security contexts
+    })
     
-    // Log safety audit (blocked requests only in production, all in dev)
-    logSafetyAudit(safetyResult.auditRecord)
+    // Log safety audit asynchronously (non-blocking)
+    logSafetyAudit(safetyResult.auditRecord, { supabase }).catch(() => {})
     
-    // If blocked, return safe refusal response
+    // Log high-risk flagged requests for review
+    if (safetyResult.requiresReview) {
+      console.log("[Coach] Request flagged for review:", {
+        userId: user.id,
+        riskScore: safetyResult.riskScore,
+        violations: safetyResult.violations.map(v => v.category),
+      })
+    }
+    
+    // If blocked, return safe refusal response (mimics normal SSE stream)
     if (!safetyResult.allowed) {
-      // Return a safe response that mimics a normal assistant message
-      return new Response(
-        `data: ${JSON.stringify({
-          type: 'text-delta',
-          delta: safetyResult.blockedResponse,
-        })}\n\ndata: ${JSON.stringify({
-          type: 'finish',
-          finishReason: 'stop',
-        })}\n\ndata: [DONE]\n\n`,
-        {
-          status: 200,
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-          },
-        }
-      )
+      const refusalResponse = safetyResult.blockedResponse || 
+        "I'm here to help with your career journey! Let's focus on job searching, resume writing, interview prep, or career advice."
+      
+      // Build proper SSE response that works with useChat
+      const sseResponse = [
+        `data: ${JSON.stringify({ type: 'text-delta', delta: refusalResponse })}`,
+        `data: ${JSON.stringify({ type: 'finish', finishReason: 'stop' })}`,
+        'data: [DONE]',
+        '',
+      ].join('\n\n')
+      
+      return new Response(sseResponse, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Safety-Blocked': 'true',
+          'X-Risk-Score': String(safetyResult.riskScore),
+        },
+      })
     }
 
     // Convert UI messages to model messages
