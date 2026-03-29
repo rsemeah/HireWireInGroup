@@ -52,8 +52,12 @@ export default function AuthLayout({
       </div>
 
       {/* Right side - Auth content */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-background">
-        <div className="w-full max-w-md">
+      <div className="flex-1 flex items-center justify-center p-6 bg-background relative overflow-hidden">
+        {/* Off-White diagonal stripes - symmetric with left panel */}
+        <DiagonalStripes position="top-right" size="lg" variant="muted" opacity={0.08} />
+        <DiagonalStripes position="bottom-left" size="lg" variant="muted" opacity={0.06} />
+        
+        <div className="w-full max-w-md relative z-10">
           {/* Mobile logo */}
           <div className="lg:hidden mb-8 flex justify-center">
             <HireWireLogo variant="red" size="lg" />
