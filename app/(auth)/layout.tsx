@@ -16,9 +16,9 @@ export default function AuthLayout({
         <DiagonalStripes position="top-left" size="lg" variant="white" opacity={0.15} />
         <DiagonalStripes position="bottom-right" size="lg" variant="white" opacity={0.1} />
         <div className="relative z-10 flex flex-col items-start px-12 py-16 text-white h-full">
-          {/* Large centered logo - positioned at ~40% from top */}
-          <div className="w-full flex justify-center pt-[10%] pb-12">
-            <HireWireLogo variant="light" size="xl" className="w-[500px] h-auto" />
+          {/* Large centered logo */}
+          <div className="w-full flex justify-center py-8">
+            <HireWireLogo variant="light" size="xl" className="w-[900px] max-w-[90%] h-auto" />
           </div>
           
           {/* Main content - flex-grow to push footer down */}
