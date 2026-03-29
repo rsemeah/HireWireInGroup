@@ -17,8 +17,8 @@ export default function AuthLayout({
         <DiagonalStripes position="bottom-right" size="lg" variant="white" opacity={0.1} />
         <div className="relative z-10 flex flex-col px-12 py-12 text-white h-full">
           {/* Large centered logo - takes up upper 60% of panel */}
-          <div className="flex-[3] flex items-center justify-center">
-            <div className="w-[65%] max-w-[480px]">
+          <div className="flex-[3] flex items-center justify-center px-8">
+            <div className="w-full max-w-[580px]">
               <HireWireLogo variant="light" size="xl" />
             </div>
           </div>
