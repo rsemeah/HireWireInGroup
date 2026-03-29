@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateText, Output } from "ai"
+import { createGroq } from "@ai-sdk/groq"
 import { z } from "zod"
 import { createAdminClient } from "@/lib/supabase/server"
+
+const groq = createGroq({
+  apiKey: process.env.GROQ_API_KEY,
+})
 
 // Role families Ro targets - used for categorization
 const ROLE_FAMILIES = [
@@ -199,7 +204,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Vercel AI Gateway handles auth automatically - no API key check needed
+    // Check for GROQ_API_KEY
+    if (!process.env.GROQ_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: "GROQ_API_KEY not configured" },
+        { status: 500 }
+      )
+    }
 
     const supabase = createAdminClient()
     const source = detectSource(job_url)
@@ -256,9 +267,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Analyze with Groq via Vercel AI Gateway
+    // Analyze with Groq
     const { output: analysis } = await generateText({
-      model: "groq/llama-3.3-70b-versatile",
+      model: groq("llama-3.3-70b-versatile"),
       output: Output.object({ schema: JobAnalysisSchema }),
       prompt: `Analyze this job posting and extract structured information.
 

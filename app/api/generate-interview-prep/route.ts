@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateText, Output } from "ai"
+import { createGroq } from "@ai-sdk/groq"
 import { z } from "zod"
 import { createAdminClient } from "@/lib/supabase/server"
 import type { 
@@ -18,7 +19,9 @@ import type {
   QuickSheet,
 } from "@/lib/interview-prep-types"
 
-// Using Vercel AI Gateway - no provider client needed
+const groq = createGroq({
+  apiKey: process.env.GROQ_API_KEY,
+})
 
 // ============================================================================
 // ZOD SCHEMAS FOR STRUCTURED GENERATION
@@ -266,7 +269,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Vercel AI Gateway handles auth automatically - no API key check needed
+    if (!process.env.GROQ_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: "GROQ_API_KEY not configured" },
+        { status: 500 }
+      )
+    }
 
     const supabase = createAdminClient()
 
@@ -317,7 +325,7 @@ TRUTH RULES:
       sectionName: string
     ): Promise<T> => {
       const { output } = await generateText({
-        model: "groq/llama-3.3-70b-versatile",
+        model: groq("llama-3.3-70b-versatile"),
         output: Output.object({ schema }),
         prompt: `${basePrompt}\n\n${sectionPrompt}`,
       })

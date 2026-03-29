@@ -25,6 +25,7 @@ interface DiagonalStripesProps {
 /**
  * Off-White / Virgil Abloh inspired diagonal hazard stripes
  * Creates the iconic industrial aesthetic
+ * v2 - fixed colorMap fallback
  */
 export function DiagonalStripes({
   className,
@@ -33,13 +34,15 @@ export function DiagonalStripes({
   variant = "black",
   opacity = 1,
 }: DiagonalStripesProps) {
-  const sizeMap = {
+  // Size configuration
+  const sizeConfig = {
     sm: { width: 60, height: 60 },
     md: { width: 100, height: 100 },
     lg: { width: 150, height: 150 },
   }
 
-  const positionMap = {
+  // Position classes
+  const positionClasses = {
     "top-left": "top-0 left-0",
     "top-right": "top-0 right-0",
     "bottom-left": "bottom-0 left-0",
@@ -47,23 +50,27 @@ export function DiagonalStripes({
     "full": "inset-0",
   }
 
-  const colorMap = {
+  // Color schemes - MUST have fallback
+  const colorSchemes = {
     black: { stripe: "#2d2d2d", bg: "#ffffff" },
     white: { stripe: "#ffffff", bg: "#2d2d2d" },
     red: { stripe: "#BD0A0A", bg: "#ffffff" },
   }
 
-  const { width, height } = sizeMap[size] ?? sizeMap.md
-  // Safely access colorMap with fallback to prevent undefined errors
-  const colors = colorMap[variant as keyof typeof colorMap] ?? colorMap.black
-  const { stripe, bg } = colors
+  // Safe access with fallbacks
+  const dimensions = sizeConfig[size] || sizeConfig.md
+  const positionClass = positionClasses[position] || positionClasses["top-left"]
+  const colorScheme = colorSchemes[variant] || colorSchemes.black
+  
+  const { width, height } = dimensions
+  const { stripe, bg } = colorScheme
   const stripeWidth = size === "sm" ? 8 : size === "md" ? 12 : 16
 
   return (
     <div
       className={cn(
         "absolute pointer-events-none overflow-hidden",
-        positionMap[position],
+        positionClass,
         position !== "full" && `w-[${width}px] h-[${height}px]`,
         className
       )}
