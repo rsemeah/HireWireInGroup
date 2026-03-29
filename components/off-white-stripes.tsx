@@ -114,7 +114,8 @@ export function HazardTape({
     red: { stripe: "#BD0A0A", bg: "#ffffff" },
   }
 
-  const { stripe, bg } = colorMap[variant]
+  const colors = colorMap[variant] || colorMap.black
+  const { stripe, bg } = colors
   const stripeWidth = 10
 
   return (
