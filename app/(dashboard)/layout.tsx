@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Topbar } from "@/components/topbar"
+import { CoachBubble } from "@/components/coach-bubble"
 
 export default function DashboardLayout({
   children,
@@ -16,6 +17,8 @@ export default function DashboardLayout({
           {children}
         </main>
       </SidebarInset>
+      {/* Floating AI Coach bubble - appears on all dashboard pages */}
+      <CoachBubble />
     </SidebarProvider>
   )
 }

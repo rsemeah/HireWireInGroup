@@ -16,6 +16,7 @@ import {
   History,
   BarChart3,
   PlusCircle,
+  Sparkles,
 } from "lucide-react"
 import {
   Sidebar,
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils"
 // Pipeline navigation - main workflow
 const pipelineNav = [
   { name: "Home", href: "/", icon: Grid2X2 },
+  { name: "Coach", href: "/coach", icon: Sparkles },
   { name: "All Jobs", href: "/jobs", icon: Briefcase },
   { name: "Ready to Apply", href: "/ready-queue", icon: CheckSquare },
   { name: "Applied", href: "/applications", icon: Send },
