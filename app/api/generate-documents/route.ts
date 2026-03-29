@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createGroq } from "@ai-sdk/groq"
-import { generateObject, generateText } from "ai"
+import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createAdminClient } from "@/lib/supabase/server"
 import {
@@ -31,9 +30,7 @@ import {
   getTemplateGuidance,
 } from "@/lib/resume-templates"
 
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-})
+// Using Vercel AI Gateway - no provider client needed
 
 // Schema for evidence mapping
 const EvidenceMapSchema = z.object({
@@ -187,12 +184,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!process.env.GROQ_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: "GROQ_API_KEY not configured" },
-        { status: 500 }
-      )
-    }
+    // Vercel AI Gateway handles auth automatically - no API key check needed
 
     const supabase = createAdminClient()
 
@@ -343,9 +335,9 @@ ${jobAnalysis?.ats_phrases?.length ? `ATS Phrases to Include: ${jobAnalysis.ats_
 `
 
     // Step 1: Create evidence map and determine strategy
-    const { object: evidenceMap } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
-      schema: EvidenceMapSchema,
+    const { output: evidenceMap } = await generateText({
+      model: "groq/llama-3.3-70b-versatile",
+      output: Output.object({ schema: EvidenceMapSchema }),
       prompt: `Analyze the match between this candidate and job opportunity.
 
 ${profileContext}
@@ -397,9 +389,9 @@ Be conservative - only include matches that are clearly supported by the evidenc
     const templateGuidance = getTemplateGuidance(selectedTemplate)
 
     // Step 2: Generate resume with bullet-level provenance
-    const { object: resumeWithProvenance } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
-      schema: ResumeWithProvenanceSchema,
+    const { output: resumeWithProvenance } = await generateText({
+      model: "groq/llama-3.3-70b-versatile",
+      output: Output.object({ schema: ResumeWithProvenanceSchema }),
       prompt: `Generate resume content with FULL PROVENANCE TRACKING for this job application.
 
 ${profileContext}
@@ -491,9 +483,9 @@ Generate 5-8 strong achievement bullets with full provenance. More bullets is be
     const projectsSection = generateProjectsSection(knownProducts, 3)
 
     // Step 3: Generate cover letter with paragraph provenance
-    const { object: coverLetterWithProvenance } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
-      schema: CoverLetterWithProvenanceSchema,
+    const { output: coverLetterWithProvenance } = await generateText({
+      model: "groq/llama-3.3-70b-versatile",
+      output: Output.object({ schema: CoverLetterWithProvenanceSchema }),
       prompt: `Generate a tailored cover letter with PROVENANCE TRACKING for each paragraph.
 
 ${profileContext}
@@ -614,9 +606,9 @@ ${signatureBlock}`
     const weakBullets = bulletAnalysis.filter(b => !b.is_concrete_enough)
 
     // Step 5: AI Quality check - use smaller model to avoid rate limits
-    const { object: qualityCheck } = await generateObject({
-      model: groq("llama-3.1-8b-instant"),
-      schema: QualityCheckSchema,
+    const { output: qualityCheck } = await generateText({
+      model: "groq/llama-3.1-8b-instant",
+      output: Output.object({ schema: QualityCheckSchema }),
       prompt: `Review this generated resume and cover letter for quality issues.
 
 SOURCE EVIDENCE:

@@ -54,7 +54,8 @@ export function DiagonalStripes({
   }
 
   const { width, height } = sizeMap[size] ?? sizeMap.md
-  const { stripe, bg } = colorMap[variant as keyof typeof colorMap] ?? colorMap.black
+  const colors = colorMap[variant as keyof typeof colorMap]
+  const { stripe, bg } = colors ?? colorMap.black
   const stripeWidth = size === "sm" ? 8 : size === "md" ? 12 : 16
 
   return (
