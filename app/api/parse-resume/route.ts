@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     // Safety check: scan for injection attempts in text content
     if (text) {
       const riskCheck = quickRiskCheck(text)
-      if (riskCheck.blocked) {
+      if (riskCheck.isHighRisk) {
         return NextResponse.json(
           { error: "Content contains disallowed patterns" },
           { status: 400 }
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
       
       // Safety check: scan file content for injection attempts
       const fileRiskCheck = quickRiskCheck(resumeText || "")
-      if (fileRiskCheck.blocked) {
+      if (fileRiskCheck.isHighRisk) {
         return NextResponse.json(
           { error: "File contains disallowed content patterns" },
           { status: 400 }
