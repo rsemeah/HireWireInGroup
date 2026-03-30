@@ -957,10 +957,10 @@ const INJECTION_PATTERNS: InjectionPattern[] = [
   {
     pattern: /[\u0399\u03B9\u0370-\u03FF].*(?:gnore|safety|rules)/i,
     category: 'unicode_attack',
-  confidence: 'high',
-  name: 'greek_homoglyph',
-  weight: 90,
-},
+    confidence: 'high',
+    name: 'greek_homoglyph',
+    weight: 90,
+  },
 ]
 
 // Additional string-based checks for extreme cases
