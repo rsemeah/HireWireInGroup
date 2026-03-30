@@ -3,6 +3,7 @@ import { generateText, Output } from "ai"
 import { createGroq } from "@ai-sdk/groq"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { quickRiskCheck, sanitizeInput } from "@/lib/safety"
 
 export const maxDuration = 60
 
@@ -88,6 +89,19 @@ export async function POST(req: NextRequest) {
 
     let resumeText = text
 
+    // Safety check: scan for injection attempts in text content
+    if (text) {
+      const riskCheck = quickRiskCheck(text)
+      if (riskCheck.blocked) {
+        return NextResponse.json(
+          { error: "Content contains disallowed patterns" },
+          { status: 400 }
+        )
+      }
+      // Sanitize input to remove potential injection vectors
+      resumeText = sanitizeInput(text)
+    }
+
     // If a file was uploaded, extract text from it
     if (file) {
       const fileType = file.type
@@ -115,6 +129,16 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         )
       }
+      
+      // Safety check: scan file content for injection attempts
+      const fileRiskCheck = quickRiskCheck(resumeText || "")
+      if (fileRiskCheck.blocked) {
+        return NextResponse.json(
+          { error: "File contains disallowed content patterns" },
+          { status: 400 }
+        )
+      }
+      resumeText = sanitizeInput(resumeText || "")
     }
 
     if (!resumeText || resumeText.trim().length < 50) {

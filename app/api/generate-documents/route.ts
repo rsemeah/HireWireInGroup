@@ -30,6 +30,7 @@ import {
   RESUME_TEMPLATES,
   getTemplateGuidance,
 } from "@/lib/resume-templates"
+import { sanitizeInput } from "@/lib/safety"
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
