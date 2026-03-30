@@ -43,7 +43,7 @@ export default async function ApplicationsPage() {
     .from("jobs")
     .select("*")
     .eq("user_id", user.id)
-    .in("status", ["applied", "interviewing", "offered", "rejected"])
+    .in("status", ["APPLIED", "INTERVIEWING", "OFFERED", "REJECTED"])
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -107,7 +107,7 @@ export default async function ApplicationsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-pink-500">
-                  {applications.filter(j => j.status === "interviewing").length}
+                  {applications.filter(j => j.status === "INTERVIEWING").length}
                 </div>
               </CardContent>
             </Card>

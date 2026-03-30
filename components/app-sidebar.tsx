@@ -17,6 +17,7 @@ import {
   BarChart3,
   PlusCircle,
   Sparkles,
+  Library,
 } from "lucide-react"
 import {
   Sidebar,
@@ -41,6 +42,7 @@ const pipelineNav = [
   { name: "Ready to Apply", href: "/ready-queue", icon: CheckSquare },
   { name: "Applied", href: "/applications", icon: Send },
   { name: "Materials", href: "/documents", icon: FileText },
+  { name: "Evidence", href: "/evidence", icon: Library },
   { name: "Companies", href: "/companies", icon: Building2 },
   { name: "Activity Log", href: "/logs", icon: History },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
