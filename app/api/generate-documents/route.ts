@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { generateText, Output } from "ai"
 import { createGroq } from "@ai-sdk/groq"
-import { generateObject, generateText } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -30,6 +30,7 @@ import {
   RESUME_TEMPLATES,
   getTemplateGuidance,
 } from "@/lib/resume-templates"
+import { sanitizeInput } from "@/lib/safety"
 
 const groq = createGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -361,9 +362,9 @@ ${(jobData.raw_description as string).slice(0, 3000)}` : ""}
 `
 
     // Step 1: Create evidence map and determine strategy
-    const { object: evidenceMap } = await generateObject({
+    const { output: evidenceMap } = await generateText({
       model: groq("llama-3.3-70b-versatile"),
-      schema: EvidenceMapSchema,
+      output: Output.object({ schema: EvidenceMapSchema }),
       prompt: `Analyze the match between this candidate and job opportunity.
 
 ${profileContext}
@@ -425,9 +426,9 @@ Be conservative - only include matches that are clearly supported by the evidenc
     const templateGuidance = getTemplateGuidance(selectedTemplate)
 
     // Step 2: Generate resume with bullet-level provenance
-    const { object: resumeWithProvenance } = await generateObject({
+    const { output: resumeWithProvenance } = await generateText({
       model: groq("llama-3.3-70b-versatile"),
-      schema: ResumeWithProvenanceSchema,
+      output: Output.object({ schema: ResumeWithProvenanceSchema }),
       prompt: `Generate resume content with FULL PROVENANCE TRACKING for this job application.
 
 ${profileContext}
@@ -519,9 +520,9 @@ Generate 5-8 strong achievement bullets with full provenance. More bullets is be
     const projectsSection = generateProjectsSection(knownProducts, 3)
 
     // Step 3: Generate cover letter with paragraph provenance
-    const { object: coverLetterWithProvenance } = await generateObject({
+    const { output: coverLetterWithProvenance } = await generateText({
       model: groq("llama-3.3-70b-versatile"),
-      schema: CoverLetterWithProvenanceSchema,
+      output: Output.object({ schema: CoverLetterWithProvenanceSchema }),
       prompt: `Generate a tailored cover letter with PROVENANCE TRACKING for each paragraph.
 
 ${profileContext}
@@ -642,9 +643,9 @@ ${signatureBlock}`
     const weakBullets = bulletAnalysis.filter(b => !b.is_concrete_enough)
 
     // Step 5: AI Quality check - use smaller model to avoid rate limits
-    const { object: qualityCheck } = await generateObject({
+    const { output: qualityCheck } = await generateText({
       model: groq("llama-3.1-8b-instant"),
-      schema: QualityCheckSchema,
+      output: Output.object({ schema: QualityCheckSchema }),
       prompt: `Review this generated resume and cover letter for quality issues.
 
 SOURCE EVIDENCE:

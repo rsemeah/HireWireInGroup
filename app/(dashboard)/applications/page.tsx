@@ -44,7 +44,7 @@ export default async function ApplicationsPage() {
     .from("jobs")
     .select("*")
     .eq("user_id", user.id)
-    .in("status", ["applied", "interviewing", "offered", "rejected"])
+    .in("status", ["APPLIED", "INTERVIEWING", "OFFERED", "REJECTED"])
     .order("created_at", { ascending: false })
 
   if (error) {
@@ -108,6 +108,7 @@ export default async function ApplicationsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-pink-500">
+                  {applications.filter(j => j.status === "INTERVIEWING").length}
                   {applications.filter(j => normalizeJobStatus(j.status) === "interviewing").length}
                 </div>
               </CardContent>
@@ -120,6 +121,7 @@ export default async function ApplicationsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-500">
+                  {applications.filter(j => j.status === "OFFERED").length}
                   {applications.filter(j => normalizeJobStatus(j.status) === "offered").length}
                 </div>
               </CardContent>
@@ -178,6 +180,7 @@ export default async function ApplicationsPage() {
           </Card>
 
           {/* Interviews Section */}
+          {applications.filter(j => j.status === "INTERVIEWING").length > 0 && (
           {applications.filter(j => normalizeJobStatus(j.status) === "interviewing").length > 0 && (
             <Card>
               <CardHeader>
@@ -189,6 +192,7 @@ export default async function ApplicationsPage() {
               <CardContent>
                 <div className="space-y-4">
                   {applications
+                    .filter(job => job.status === "INTERVIEWING")
                     .filter(job => normalizeJobStatus(job.status) === "interviewing")
                     .map(job => (
                       <Link

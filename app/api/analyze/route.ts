@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { generateText, Output } from "ai"
 import { createGroq } from "@ai-sdk/groq"
-import { generateObject } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { runJobFlow } from "@/lib/orchestrator/runJobFlow"
@@ -281,9 +281,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Analyze with Groq
-    const { object: analysis } = await generateObject({
+    const { output: analysis } = await generateText({
       model: groq("llama-3.3-70b-versatile"),
-      schema: JobAnalysisSchema,
+      output: Output.object({ schema: JobAnalysisSchema }),
       prompt: `Analyze this job posting and extract structured information.
 
 Be precise and extract only what is explicitly stated. Do not invent or assume information.

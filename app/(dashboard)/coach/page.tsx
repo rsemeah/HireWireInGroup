@@ -1,0 +1,203 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { CoachChat } from "@/components/coach-chat"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Sparkles, MessageSquare, Plus, Trash2 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
+
+interface Conversation {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+export default function CoachPage() {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Load conversations on mount
+  useEffect(() => {
+    async function loadConversations() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
+      const { data } = await supabase
+        .from("companion_conversations")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+
+      if (data) {
+        setConversations(data)
+      }
+      setLoading(false)
+    }
+
+    loadConversations()
+  }, [])
+
+  // Create new conversation
+  async function createConversation() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("companion_conversations")
+      .insert({
+        user_id: user.id,
+        title: `Chat ${format(new Date(), "MMM d, h:mm a")}`,
+      })
+      .select()
+      .single()
+
+    if (data && !error) {
+      setConversations(prev => [data, ...prev])
+      setActiveConversationId(data.id)
+    }
+  }
+
+  // Delete conversation
+  async function deleteConversation(id: string) {
+    const supabase = createClient()
+    
+    await supabase
+      .from("companion_conversations")
+      .delete()
+      .eq("id", id)
+
+    setConversations(prev => prev.filter(c => c.id !== id))
+    if (activeConversationId === id) {
+      setActiveConversationId(null)
+    }
+  }
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] gap-6 p-6">
+      {/* Sidebar - Conversation History */}
+      <Card className="w-72 shrink-0 flex flex-col">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-hirewire-red" />
+              <CardTitle className="text-lg">Coach</CardTitle>
+            </div>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              onClick={createConversation}
+              className="h-8 w-8"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          <CardDescription>Your AI career advisor</CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 p-0">
+          <ScrollArea className="h-full px-4 pb-4">
+            {loading ? (
+              <div className="py-4 text-center text-sm text-muted-foreground">
+                Loading...
+              </div>
+            ) : conversations.length === 0 ? (
+              <div className="py-8 text-center">
+                <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground">No conversations yet</p>
+                <Button 
+                  variant="link" 
+                  className="text-hirewire-red mt-2"
+                  onClick={createConversation}
+                >
+                  Start a conversation
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {/* New chat button */}
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "w-full justify-start gap-2 h-auto py-2 px-3",
+                    !activeConversationId && "bg-muted"
+                  )}
+                  onClick={() => setActiveConversationId(null)}
+                >
+                  <Plus className="h-4 w-4 text-hirewire-red" />
+                  <span className="text-sm">New chat</span>
+                </Button>
+
+                {/* Conversation list */}
+                {conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={cn(
+                      "group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors",
+                      activeConversationId === conversation.id && "bg-muted"
+                    )}
+                    onClick={() => setActiveConversationId(conversation.id)}
+                  >
+                    <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{conversation.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(conversation.updated_at), "MMM d")}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteConversation(conversation.id)
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      {/* Main Chat Area */}
+      <Card className="flex-1 flex flex-col">
+        <CardHeader className="pb-3 border-b">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-hirewire-red/10 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-hirewire-red" />
+            </div>
+            <div>
+              <CardTitle>HireWire Coach</CardTitle>
+              <CardDescription>
+                Career strategy, interview prep, evidence building, and document improvement
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 p-0 overflow-hidden">
+          <CoachChat 
+            key={activeConversationId || "new"}
+            conversationId={activeConversationId || undefined}
+            className="h-full"
+          />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
