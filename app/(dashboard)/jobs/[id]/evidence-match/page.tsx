@@ -261,7 +261,7 @@ export default function EvidenceMatchPage() {
       .from("jobs")
       .update({ 
         evidence_map: evidenceMap,
-        status: "REVIEWING"
+        status: "analyzed"
       })
       .eq("id", jobId)
       .eq("user_id", user.id)
