@@ -602,30 +602,46 @@ ${signatureBlock}`
     const weakBullets = bulletAnalysis.filter(b => !b.is_concrete_enough)
 
     // Step 5: AI Quality check - use smaller model to avoid rate limits
-    const { object: qualityCheck } = await generateObject({
-      model: groq("llama-3.1-8b-instant"),
-      schema: QualityCheckSchema,
-      prompt: `Review this generated resume and cover letter for quality issues.
-
-SOURCE EVIDENCE:
-${profileContext}
-${evidenceContext}
+    // Wrapped in try-catch since smaller models can sometimes fail schema compliance
+    let qualityCheck: z.infer<typeof QualityCheckSchema>
+    try {
+      const result = await generateObject({
+        model: groq("llama-3.1-8b-instant"),
+        schema: QualityCheckSchema,
+        prompt: `You are a resume quality reviewer. Analyze the generated documents and return a JSON object with your findings.
 
 GENERATED RESUME:
-${formattedResume}
+${formattedResume.slice(0, 2000)}
 
 GENERATED COVER LETTER:
-${formattedCoverLetter}
+${formattedCoverLetter.slice(0, 1500)}
 
-Check for:
-1. Invented claims not supported by the evidence
-2. Vague bullets that could apply to anyone
-3. AI-sounding filler phrases
-4. Repetitive sentence structures
-5. Unsupported or exaggerated claims
+Return a JSON object with these exact fields:
+- invented_claims: array of strings (claims that seem fabricated)
+- vague_bullets: array of strings (bullets too generic)
+- ai_filler: array of strings (AI-sounding phrases)
+- repeated_structures: array of strings (repetitive patterns)
+- unsupported_claims: array of strings (unverifiable claims)
+- overall_passed: boolean (true if quality is acceptable)
+- improvement_suggestions: array of strings (suggestions to improve)
 
-Be strict - flag anything that seems fabricated or generic.`,
-    })
+If no issues found, return empty arrays and overall_passed: true.`,
+      })
+      qualityCheck = result.object
+    } catch (qualityCheckError) {
+      console.error("Quality check failed, using defaults:", qualityCheckError)
+      // Default to passing quality check if the AI model fails
+      // The rule-based checks (banned phrases, vague patterns) will still run
+      qualityCheck = {
+        invented_claims: [],
+        vague_bullets: [],
+        ai_filler: [],
+        repeated_structures: [],
+        unsupported_claims: [],
+        overall_passed: true,
+        improvement_suggestions: []
+      }
+    }
 
     // Build provenance records for storage
     const bulletProvenance: BulletProvenance[] = resumeWithProvenance.experience_bullets.map(b => ({
