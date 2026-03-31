@@ -18,6 +18,12 @@ import {
   type ParagraphProvenance,
 } from "@/lib/truthserum"
 import {
+  detectUnsafeMetrics,
+  classifyQuantificationSafety,
+  rewriteToQualitative,
+  type QuantificationSafety,
+} from "@/lib/canonical-evidence"
+import {
   runPreGenerationEnhancement,
   generateProjectsSection,
 } from "@/lib/bullet-enhancer"
@@ -501,13 +507,31 @@ WRITING RULES:
 5. Write like a human professional would - confident but not robotic
 6. If pre-approved bullets exist in evidence, use them directly
 
+QUANTIFICATION POLICY - CRITICAL:
+ALLOWED metrics:
+- Numbers explicitly stated in the evidence (exact amounts, percentages, counts)
+- Deterministic derivations ("team of 5 across 3 regions")
+- Factual counts from evidence (number of products, countries, users if stated)
+
+NOT ALLOWED - DO NOT INVENT:
+- Percentages like "reduced churn by 25%" unless explicitly in evidence
+- Time savings like "saved 40 hours/week" unless explicitly in evidence
+- Revenue impact like "generated $2M" unless explicitly in evidence
+- Improvement claims like "improved efficiency by 30%" unless explicitly in evidence
+
+IF NO METRIC IN EVIDENCE, use qualitative language instead:
+- "Reduced manual work" (not "reduced by 60%")
+- "Improved visibility" (not "increased by 45%")
+- "Strengthened stakeholder alignment" (not "improved satisfaction by 90%")
+- "Accelerated delivery" (not "reduced time by 50%")
+
 KEEP IT SPECIFIC:
-- Use exact numbers: "team of 5" not "team"
+- Use exact numbers ONLY when in evidence: "team of 5" not "team"
 - Name tools: "React, PostgreSQL" not "modern stack"
-- Include scale: "50K users" not "users"
+- Include scale ONLY if in evidence: "50K users" not "users"
 - Preserve industry: "B2B fintech" not "software"
 
-Write 5-8 achievement bullets that the candidate could confidently discuss in an interview.`,
+Write 5-8 achievement bullets that the candidate could confidently discuss in an interview. Every metric must be traceable to evidence.`,
     })
 
     // Step 2.5: PRE-GENERATION ENHANCEMENT PASS
@@ -651,6 +675,22 @@ ${signatureBlock}`
     }))
     
     const weakBullets = bulletAnalysis.filter(b => !b.is_concrete_enough)
+    
+    // QUANTIFICATION SAFETY CHECK - Detect and flag unsafe invented metrics
+    const unsafeMetricsFound: { bullet: string; unsafe_claims: string[]; safe_alternatives: string[] }[] = []
+    
+    for (const bullet of enhancedBullets) {
+      const { has_unsafe, unsafe_claims, safe_alternatives } = detectUnsafeMetrics(bullet.bullet_text)
+      if (has_unsafe) {
+        unsafeMetricsFound.push({
+          bullet: bullet.bullet_text,
+          unsafe_claims,
+          safe_alternatives,
+        })
+      }
+    }
+    
+    // Unsafe metrics will be flagged in quality issues
 
     // Step 5: AI Quality check - use smaller model to avoid rate limits
     // Wrapped in try-catch since smaller models can sometimes fail schema compliance
@@ -718,10 +758,11 @@ If no issues found, return empty arrays and overall_passed: true.`,
       unsupported_language: detectBannedPhrases(p.paragraph_text)
     }))
 
-    // Calculate quality score
+    // Calculate quality score - now includes quantification safety
     const qualityPassed = qualityCheck.overall_passed && 
       allBannedPhrases.length === 0 && 
-      weakBullets.length <= 1
+      weakBullets.length <= 1 &&
+      unsafeMetricsFound.length === 0 // Block if we detected invented metrics
 
     const qualityScore = qualityPassed ? 100 : Math.max(0, 
       100 - 
@@ -786,12 +827,13 @@ If no issues found, return empty arrays and overall_passed: true.`,
         generation_status: qualityPassed ? "ready" : "needs_review",
         generation_error: null,
         generation_quality_score: qualityScore,
-        generation_quality_issues: [
-          ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
-          ...vaguePatterns.map(p => `Vague pattern: "${p}"`),
-          ...weakBullets.map(b => `Weak bullet (${b.concrete_signal_count}/4 signals): "${b.bullet.substring(0, 50)}..."`),
-          ...qualityCheck.invented_claims,
-          ...qualityCheck.vague_bullets,
+    generation_quality_issues: [
+      ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
+      ...vaguePatterns.map(p => `Vague pattern: "${p}"`),
+      ...weakBullets.map(b => `Weak bullet (${b.concrete_signal_count}/4 signals): "${b.bullet.substring(0, 50)}..."`),
+      ...unsafeMetricsFound.map(m => `UNSAFE METRIC: "${m.unsafe_claims[0]}" - Use instead: "${m.safe_alternatives[0] || 'qualitative language'}"`),
+      ...qualityCheck.invented_claims,
+      ...qualityCheck.vague_bullets,
           ...qualityCheck.ai_filler,
         ],
         quality_passed: qualityPassed,
