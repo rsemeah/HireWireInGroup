@@ -24,6 +24,14 @@ interface CoachChatProps {
   conversationId?: string
   compact?: boolean
   onClose?: () => void
+  /** Optional job context to help the coach provide job-specific advice */
+  jobContext?: {
+    jobId: string
+    title: string
+    company: string
+    score?: number | null
+    status?: string
+  }
 }
 
 // Quick action suggestions
@@ -39,12 +47,21 @@ function getMessageText(message: { content?: string }): string {
   return message.content || ""
 }
 
-export function CoachChat({ className, conversationId, compact = false, onClose }: CoachChatProps) {
+export function CoachChat({ className, conversationId, compact = false, onClose, jobContext }: CoachChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const { messages, input, setInput, handleSubmit: submitMessage, isLoading, append } = useChat({
     api: "/api/coach",
+    body: jobContext ? {
+      jobContext: {
+        jobId: jobContext.jobId,
+        title: jobContext.title,
+        company: jobContext.company,
+        score: jobContext.score,
+        status: jobContext.status,
+      }
+    } : undefined,
   })
 
   // Auto-scroll to bottom when new messages arrive
@@ -97,9 +114,19 @@ export function CoachChat({ className, conversationId, compact = false, onClose 
                   Hey! I&apos;m your personal career coach. I can help you with job search strategy, 
                   interview prep, building your evidence library, and improving your application materials.
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  What would you like to work on today?
-                </p>
+                {jobContext ? (
+                  <div className="p-2 bg-muted rounded-md border text-sm">
+                    <p className="font-medium">Currently focused on:</p>
+                    <p className="text-muted-foreground">
+                      {jobContext.title} at {jobContext.company}
+                      {jobContext.score !== null && jobContext.score !== undefined && ` (Fit: ${jobContext.score}%)`}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    What would you like to work on today?
+                  </p>
+                )}
               </div>
             </div>
 

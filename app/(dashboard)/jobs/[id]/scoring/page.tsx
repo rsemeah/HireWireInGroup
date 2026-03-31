@@ -314,6 +314,19 @@ export default function ScoringCenterPage() {
   const overallScore = weightedOverallScore || job?.score || 0
   const fit = determineFit(overallScore)
 
+  // Navigate to next step in the workflow
+  const handleProceedToEvidenceMatch = () => {
+    router.push(`/jobs/${jobId}/evidence-match`)
+  }
+
+  const handleProceedToRedTeam = () => {
+    router.push(`/jobs/${jobId}/red-team`)
+  }
+
+  const handleProceedToInterviewPrep = () => {
+    router.push(`/jobs/${jobId}/interview-prep`)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">

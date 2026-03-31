@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 "use client"
 
 import { JobUrlInput } from "@/components/job-input"
@@ -38,10 +37,4 @@ export default function AddJobPage() {
       </div>
     </div>
   )
-=======
-import { redirect } from "next/navigation"
-
-export default function NewJobPage() {
-  redirect("/manual-entry")
->>>>>>> 5cd6e3e (Launch blocker elimination: schema convergence, migration hardening, docs + config alignment)
 }

@@ -10,7 +10,19 @@ export function createClient() {
   
   supabaseClient = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        // Disable lock to prevent contention in React Strict Mode
+        lock: 'no-op',
+        // Use localStorage for persistence (more stable)
+        storageKey: 'sb-auth-token',
+        // Detect session in URL for OAuth flows
+        detectSessionInUrl: true,
+        // Flow type for PKCE
+        flowType: 'pkce',
+      },
+    }
   )
   
   return supabaseClient
