@@ -1,4 +1,3 @@
-// Applications Page - Tracks applied jobs and interview stages
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
@@ -34,13 +33,11 @@ function formatDate(dateString: string | null) {
 export default async function ApplicationsPage() {
   const supabase = await createClient()
   
-  // Get current user
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError || !user) {
     redirect("/login")
   }
   
-  // Fetch jobs that have been applied to (using canonical statuses) - filtered by user
   const { data: appliedJobs, error } = await supabase
     .from("jobs")
     .select("*")
@@ -70,6 +67,9 @@ export default async function ApplicationsPage() {
   }
 
   const applications = appliedJobs || []
+  
+  const interviewingCount = applications.filter(j => normalizeJobStatus(j.status) === "interviewing").length
+  const offeredCount = applications.filter(j => normalizeJobStatus(j.status) === "offered").length
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -88,7 +88,6 @@ export default async function ApplicationsPage() {
         <EmptyState variant="applications" />
       ) : (
         <>
-          {/* Stats */}
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="pb-2">
@@ -109,7 +108,7 @@ export default async function ApplicationsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-pink-500">
-                  {applications.filter(j => normalizeJobStatus(j.status) === "interviewing").length}
+                  {interviewingCount}
                 </div>
               </CardContent>
             </Card>
@@ -121,13 +120,12 @@ export default async function ApplicationsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-500">
-                  {applications.filter(j => normalizeJobStatus(j.status) === "offered").length}
+                  {offeredCount}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Applications Table */}
           <Card>
             <CardHeader>
               <CardTitle>Submitted Applications</CardTitle>
@@ -178,8 +176,7 @@ export default async function ApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* Interviews Section - Interview Stage Applications */}
-          {applications.filter(j => normalizeJobStatus(j.status) === "interviewing").length > 0 && (
+          {interviewingCount > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

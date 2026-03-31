@@ -143,12 +143,29 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile])
 
   const signOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-    // Force a full page reload to clear all state
-    window.location.href = "/login"
+    console.log("[v0] signOut called - starting sign out process")
+    try {
+      const supabase = createClient()
+      console.log("[v0] signOut - calling supabase.auth.signOut()")
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error("[v0] signOut error:", error)
+        throw error
+      }
+      
+      console.log("[v0] signOut - Supabase signOut successful, clearing state")
+      setUser(null)
+      setProfile(null)
+      
+      // Force a full page reload to clear all state
+      console.log("[v0] signOut - redirecting to /login")
+      window.location.href = "/login"
+    } catch (err) {
+      console.error("[v0] signOut - catch block error:", err)
+      // Even if there's an error, try to redirect
+      window.location.href = "/login"
+    }
   }
 
   return (
