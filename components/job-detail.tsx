@@ -68,8 +68,18 @@ interface JobDetailProps {
   job: Job
 }
 
-// Fit badge component with proper styling
-function FitBadge({ fit, score }: { fit: JobFit; score: number | null }) {
+// Fit badge component with proper styling and explainable tooltip
+function FitBadge({ fit, score, scoreReasoning }: { 
+  fit: JobFit; 
+  score: number | null;
+  scoreReasoning?: {
+    fit_band?: string;
+    confidence?: string;
+    matched_requirements?: number;
+    total_requirements?: number;
+    score_explanation?: string;
+  } | null;
+}) {
   if (!fit) return <Badge variant="outline" className="text-xs">Unscored</Badge>
   
   const config = FIT_CONFIG[fit]
@@ -79,10 +89,33 @@ function FitBadge({ fit, score }: { fit: JobFit; score: number | null }) {
     LOW: "bg-red-100 text-red-800 border-red-200",
   }
   
+  // Map fit band to display labels
+  const fitBandLabels: Record<string, string> = {
+    "strong_match": "Strong Match",
+    "moderate_match": "Moderate Match",
+    "stretch_but_viable": "Stretch Fit",
+    "low_match": "Low Match",
+  }
+  
+  const displayLabel = scoreReasoning?.fit_band 
+    ? fitBandLabels[scoreReasoning.fit_band] || config.label
+    : config.label
+  
+  const confidenceLabel = scoreReasoning?.confidence 
+    ? `(${scoreReasoning.confidence} confidence)`
+    : ""
+  
   return (
-    <Badge className={`${colorClasses[fit]} border`}>
-      {config.label} {score ? `(${score})` : ""}
-    </Badge>
+    <div className="flex items-center gap-2">
+      <Badge className={`${colorClasses[fit]} border`}>
+        {displayLabel} {score ? `${score}/100` : ""}
+      </Badge>
+      {scoreReasoning?.matched_requirements !== undefined && scoreReasoning?.total_requirements !== undefined && (
+        <span className="text-xs text-muted-foreground">
+          {scoreReasoning.matched_requirements}/{scoreReasoning.total_requirements} requirements matched {confidenceLabel}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -203,7 +236,11 @@ function GenerationStatusBanner({
       icon: XCircle,
       className: "text-red-600",
       bgClassName: "bg-red-50 border-red-200",
-      label: error || "Generation failed",
+      // Show user-friendly error message, not technical details
+      label: error?.includes("profile") ? "Complete your profile to generate materials" :
+             error?.includes("evidence") ? "Add evidence to your library first" :
+             error?.includes("stretch") ? "This role may not be a good fit" :
+             "Generation failed - tap retry to try again",
       showRetry: true,
     },
     needs_review: {
@@ -352,6 +389,39 @@ export function JobDetail({ job }: JobDetailProps) {
         })
         router.refresh()
       } else {
+        // Convert technical errors to user-friendly messages
+        const getUserFriendlyError = (error: string): { title: string; description: string } => {
+          if (error?.includes("profile not found") || error?.includes("Profile not found")) {
+            return {
+              title: "Profile Required",
+              description: "Please complete your profile before generating materials"
+            }
+          }
+          if (error?.includes("evidence") && error?.includes("not found")) {
+            return {
+              title: "Add Some Evidence First",
+              description: "Add work experience to your Evidence Library to generate tailored materials"
+            }
+          }
+          if (error?.includes("Job not found")) {
+            return {
+              title: "Job Not Found",
+              description: "This job may have been deleted"
+            }
+          }
+          if (error?.includes("stretch") || error?.includes("blocked")) {
+            return {
+              title: "Generation Blocked",
+              description: "This role is too much of a stretch based on your current evidence"
+            }
+          }
+          // Default - don't show technical details
+          return {
+            title: "Generation Failed",
+            description: "Something went wrong. Please try again or contact support."
+          }
+        }
+        
         // Handle rate limit specially
         if (data.isRateLimit || response.status === 429) {
           const retryAfter = data.retryAfter || 30
@@ -371,26 +441,28 @@ export function JobDetail({ job }: JobDetailProps) {
           }, 1000)
           
           toast.error("AI service is busy", {
-            description: `Please wait ${retryAfter} seconds before retrying`,
-            action: {
-              label: "Retry in " + retryAfter + "s",
-              onClick: () => {}
-            }
+            description: `Please wait ${retryAfter} seconds before retrying`
           })
         } else if (data.strategy === "do_not_generate") {
           // Generation was blocked due to poor fit
-          setGenerationError(data.error)
-          toast.error("Generation blocked", {
-            description: data.strategy_reasoning || "This role is too much of a stretch"
+          const friendly = getUserFriendlyError("blocked")
+          setGenerationError(friendly.description)
+          toast.error(friendly.title, {
+            description: data.strategy_reasoning || friendly.description
           })
         } else {
-          setGenerationError(data.error)
-          toast.error(data.error || "Failed to generate materials")
+          const friendly = getUserFriendlyError(data.error || "")
+          setGenerationError(friendly.description)
+          toast.error(friendly.title, {
+            description: friendly.description
+          })
         }
       }
     } catch (err) {
-      setGenerationError("Network error - please try again")
-      toast.error("Failed to generate materials")
+      setGenerationError("Something went wrong. Please try again.")
+      toast.error("Connection Error", {
+        description: "Please check your internet connection and try again"
+      })
     } finally {
       setIsGenerating(false)
     }
@@ -449,7 +521,17 @@ export function JobDetail({ job }: JobDetailProps) {
                 {job.title}
               </CardTitle>
               <div className="flex flex-wrap gap-2 mt-3">
-                <FitBadge fit={job.fit} score={job.score} />
+                <FitBadge 
+                  fit={job.fit} 
+                  score={job.score} 
+                  scoreReasoning={job.score_reasoning as {
+                    fit_band?: string;
+                    confidence?: string;
+                    matched_requirements?: number;
+                    total_requirements?: number;
+                    score_explanation?: string;
+                  } | null}
+                />
                 {job.role_family && (
                   <Badge variant="secondary">{job.role_family}</Badge>
                 )}
@@ -582,6 +664,48 @@ export function JobDetail({ job }: JobDetailProps) {
               )}
             </div>
           </div>
+
+          {/* Explainable Score Breakdown - Show when v3.0 scoring is available */}
+          {job.score_reasoning && (job.score_reasoning as { scoring_version?: string }).scoring_version === "3.0-explainable" && (
+            <>
+              <Separator className="my-4" />
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Target className="h-4 w-4 text-primary" />
+                  Score Breakdown
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  {(job.score_reasoning as { score_explanation?: string }).score_explanation}
+                </p>
+                
+                {/* Dimension scores */}
+                <div className="grid grid-cols-5 gap-2">
+                  {Object.entries((job.score_reasoning as { dimension_scores?: Record<string, number> }).dimension_scores || {}).map(([dim, score]) => (
+                    <div key={dim} className="text-center">
+                      <div className={`text-lg font-bold ${
+                        Number(score) >= 70 ? "text-green-600" : 
+                        Number(score) >= 40 ? "text-amber-600" : "text-red-600"
+                      }`}>
+                        {Math.round(Number(score))}
+                      </div>
+                      <div className="text-xs text-muted-foreground capitalize">{dim}</div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Warnings */}
+                {(job.score_reasoning as { warnings?: string[] }).warnings?.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {((job.score_reasoning as { warnings?: string[] }).warnings || []).map((warning, i) => (
+                      <Badge key={i} variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-700">
+                        {warning}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           <Separator className="my-4" />
 

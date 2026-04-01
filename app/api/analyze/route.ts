@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
-import { generateText, generateObject } from "ai"
-import { createGroq } from "@ai-sdk/groq"
+import { generateObject } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { runJobFlow } from "@/lib/orchestrator/runJobFlow"
+import { inferRoleFromJobTitle, getWeightsForRole, calculateWeightedScore, type ScoringWeights } from "@/lib/scoring-weights"
+import { 
+  normalizeEvidenceRecord, 
+  normalizeProfileExperience,
+  calculateExplainableFit,
+  type CanonicalEvidence,
+  type ExplainableFitScore,
+  type FitBand,
+} from "@/lib/canonical-evidence"
+import { groq, isGroqConfigured, MODELS } from "@/lib/adapters/groq"
+import { AnalyzeJobInputSchema } from "@/lib/schemas/job-intake"
+import { parseJobPage, detectSource } from "@/lib/parsers"
+import { findJobByUrl } from "@/lib/queries/jobs"
 
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-})
-
-// Role families Ro targets - used for categorization
+// Role families for categorization - PM-focused but extensible
 const ROLE_FAMILIES = [
   "AI Technical Product Manager",
   "Technical Product Manager",
@@ -44,7 +52,7 @@ const JobAnalysisSchema = z.object({
   industry_guess: z.string().nullable().describe("Primary industry (AI, SaaS, FinTech, EdTech, etc.) or null if unknown"),
   seniority_level: z.string().nullable().describe("Seniority level: Entry, Mid, Senior, Lead, Principal, Director, VP, or C-Level"),
   
-  // Fit signals for Ro specifically
+  // Fit signals for candidate matching
   fit_signals: z.object({
     has_ai_focus: z.boolean().describe("Does the role involve AI/ML products?"),
     has_technical_requirements: z.boolean().describe("Does it require technical fluency?"),
@@ -75,39 +83,12 @@ async function fetchJobPage(url: string): Promise<string> {
 
     const html = await response.text()
     
-    // Basic HTML to text conversion - strip tags but keep structure
-    const text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 15000) // Limit content size for LLM
-
-    return text
+    // Use parser registry for source-specific parsing
+    const parsed = parseJobPage(html, url)
+    return parsed.text
   } finally {
     clearTimeout(timeoutId)
   }
-}
-
-function detectSource(url: string): string {
-  const lowercase = url.toLowerCase()
-  if (lowercase.includes("greenhouse.io")) return "GREENHOUSE"
-  if (lowercase.includes("lever.co")) return "LEVER"
-  if (lowercase.includes("linkedin.com")) return "LINKEDIN"
-  if (lowercase.includes("indeed.com")) return "INDEED"
-  if (lowercase.includes("workday.com")) return "WORKDAY"
-  if (lowercase.includes("ashbyhq.com")) return "ASHBY"
-  if (lowercase.includes("icims.com")) return "ICIMS"
-  if (lowercase.includes("smartrecruiters.com")) return "SMARTRECRUITERS"
-  return "OTHER"
 }
 
 // Normalize seniority level to standard values
@@ -124,91 +105,130 @@ function normalizeSeniority(level: string | null): string {
   return "Mid" // Default to Mid if unclear
 }
 
-// Calculate initial fit based on fit signals
-function calculateInitialFit(fitSignals: z.infer<typeof JobAnalysisSchema>["fit_signals"]): {
+// Calculate initial fit based on fit signals (user-agnostic baseline scoring)
+// This provides a generic signal-based score before evidence matching refines it
+function calculateInitialFitFromSignals(fitSignals: z.infer<typeof JobAnalysisSchema>["fit_signals"]): {
   fit: "HIGH" | "MEDIUM" | "LOW"
   score: number
   reasoning: string[]
 } {
-  let score = 50 // Start at neutral
+  // Start at neutral - signals move score up or down
+  let score = 50
   const reasoning: string[] = []
 
-  // Positive signals for Ro
+  // Role attribute signals (user-agnostic - just describing the role)
   if (fitSignals.has_ai_focus) {
-    score += 15
-    reasoning.push("AI/ML product focus aligns well")
+    reasoning.push("Role involves AI/ML products")
   }
   if (fitSignals.has_technical_requirements) {
-    score += 10
-    reasoning.push("Technical fluency requirement matches")
+    reasoning.push("Role requires technical fluency")
   }
   if (fitSignals.has_workflow_focus) {
-    score += 10
-    reasoning.push("Workflow/automation focus is a strength")
+    reasoning.push("Role focuses on workflow/automation")
   }
   if (fitSignals.has_startup_culture) {
-    score += 5
-    reasoning.push("Startup culture fits founder-style approach")
+    reasoning.push("Startup/agile environment")
   }
   if (fitSignals.product_ownership_level === "high") {
-    score += 10
-    reasoning.push("High product ownership aligns with experience")
-  } else if (fitSignals.product_ownership_level === "medium") {
-    score += 5
+    reasoning.push("High product ownership expected")
   }
-
-  // Negative signals
   if (fitSignals.has_pure_engineering) {
-    score -= 20
-    reasoning.push("Pure engineering role - not ideal fit")
+    reasoning.push("Primarily an engineering role")
   }
   if (fitSignals.has_people_management) {
-    score -= 10
-    reasoning.push("People management not a primary strength")
+    reasoning.push("People management required")
   }
 
-  // Clamp score
-  score = Math.max(0, Math.min(100, score))
+  // Score starts neutral - actual fit is determined by evidence matching
+  // The signals above just describe the role for evidence matching
+  // Evidence matching will compare these against user's actual experience
+  
+  // Basic score adjustments based on common role patterns
+  // (These are just baseline indicators, not persona-specific)
+  const positiveSignals = [
+    fitSignals.has_ai_focus,
+    fitSignals.has_technical_requirements,
+    fitSignals.has_workflow_focus,
+    fitSignals.product_ownership_level === "high",
+  ].filter(Boolean).length
+  
+  score += positiveSignals * 5 // Small baseline boost for each positive signal
 
-  const fit = score >= 70 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW"
+  // Clamp score
+  score = Math.max(30, Math.min(70, score)) // Keep in middle range - evidence matching determines final
+
+  const fit = score >= 60 ? "HIGH" : score >= 45 ? "MEDIUM" : "LOW"
 
   return { fit, score, reasoning }
+}
+
+// Calculate role-aware fit score using weighted dimensions
+function calculateRoleAwareFit(
+  jobTitle: string,
+  dimensionScores: {
+    experience: number
+    evidence: number
+    skills: number
+    seniority: number
+    ats: number
+  }
+): {
+  fit: "HIGH" | "MEDIUM" | "LOW"
+  score: number
+  weights: ScoringWeights
+  inferredRole: string
+  reasoning: string[]
+} {
+  // Infer role category from job title
+  const inferredRole = inferRoleFromJobTitle(jobTitle)
+  const weights = getWeightsForRole(inferredRole)
+  
+  // Calculate weighted score
+  const score = calculateWeightedScore(dimensionScores, weights)
+  
+  // Generate reasoning based on which dimensions contributed most
+  const reasoning: string[] = []
+  const sortedDimensions = Object.entries(weights)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3) // Top 3 weighted dimensions
+  
+  for (const [dimension, weight] of sortedDimensions) {
+    if (weight >= 20) {
+      const dimScore = dimensionScores[dimension as keyof typeof dimensionScores]
+      if (dimScore >= 70) {
+        reasoning.push(`Strong ${dimension} alignment (${weight}% weight, ${dimScore} score)`)
+      } else if (dimScore >= 40) {
+        reasoning.push(`Moderate ${dimension} fit (${weight}% weight, ${dimScore} score)`)
+      } else {
+        reasoning.push(`${dimension} gap identified (${weight}% weight, ${dimScore} score)`)
+      }
+    }
+  }
+  
+  const fit = score >= 70 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW"
+  
+  return { fit, score, weights, inferredRole, reasoning }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { job_url } = body
-
-    if (!job_url) {
+    
+    // Validate input using schema
+    const parseResult = AnalyzeJobInputSchema.safeParse(body)
+    if (!parseResult.success) {
       return NextResponse.json(
-        { success: false, error: "job_url is required" },
+        { success: false, error: parseResult.error.errors[0]?.message || "Invalid input" },
         { status: 400 }
       )
     }
+    
+    const { job_url } = parseResult.data
 
-    // Validate URL
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(job_url)
-    } catch {
+    // Check for Groq configuration
+    if (!isGroqConfigured()) {
       return NextResponse.json(
-        { success: false, error: "Invalid URL format" },
-        { status: 400 }
-      )
-    }
-
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      return NextResponse.json(
-        { success: false, error: "URL must use http or https" },
-        { status: 400 }
-      )
-    }
-
-    // Check for GROQ_API_KEY
-    if (!process.env.GROQ_API_KEY) {
-      return NextResponse.json(
-        { success: false, error: "GROQ_API_KEY not configured" },
+        { success: false, error: "AI service not configured" },
         { status: 500 }
       )
     }
@@ -227,13 +247,8 @@ export async function POST(request: NextRequest) {
     }
     const source = detectSource(job_url)
 
-    // Check for existing job with this URL
-    const { data: existingJob } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("source_url", job_url)
-      .eq("user_id", user.id)
-      .maybeSingle()
+    // Check for existing job with this URL (using extracted query)
+    const { data: existingJob } = await findJobByUrl(supabase, user.id, job_url)
 
     if (existingJob) {
       // Return full analysis data for duplicates so UI can render properly
@@ -282,7 +297,7 @@ export async function POST(request: NextRequest) {
 
     // Analyze with Groq
     const { object: analysis } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq(MODELS.VERSATILE),
       schema: JobAnalysisSchema,
       prompt: `Analyze this job posting and extract structured information.
 
@@ -307,11 +322,102 @@ ${pageContent}
 Extract the job details following the schema. Be accurate with the role_family categorization based on the actual role requirements.`,
     })
 
-    // Calculate initial fit
-    const fitResult = calculateInitialFit(analysis.fit_signals)
-    
     // Normalize seniority level
     const normalizedSeniority = normalizeSeniority(analysis.seniority_level)
+    
+    // Fetch user's evidence library and profile for evidence-based matching
+    const [evidenceResult, profileResult] = await Promise.all([
+      supabase
+        .from("evidence_library")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true),
+      supabase
+        .from("user_profile")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ])
+    
+    // Normalize evidence into canonical format
+    const canonicalEvidence: CanonicalEvidence[] = []
+    
+    // Add evidence library items
+    if (evidenceResult.data) {
+      for (const record of evidenceResult.data) {
+        canonicalEvidence.push(normalizeEvidenceRecord(record))
+      }
+    }
+    
+    // Add profile experience items
+    if (profileResult.data?.experience) {
+      const experiences = Array.isArray(profileResult.data.experience) 
+        ? profileResult.data.experience 
+        : []
+      for (const exp of experiences) {
+        canonicalEvidence.push(...normalizeProfileExperience(exp, user.id))
+      }
+    }
+    
+    // Calculate dimension scores based on actual evidence
+    const techStackMatch = analysis.tech_stack.filter(tech => 
+      canonicalEvidence.some(e => 
+        e.skills.some(s => s.toLowerCase().includes(tech.toLowerCase())) ||
+        e.text.toLowerCase().includes(tech.toLowerCase())
+      )
+    )
+    
+    const keywordMatches = analysis.keywords.filter(kw =>
+      canonicalEvidence.some(e => e.text.toLowerCase().includes(kw.toLowerCase()))
+    )
+    
+    const dimensionScores = {
+      experience: canonicalEvidence.filter(e => e.evidence_type === "work_experience").length > 0 ? 70 : 40,
+      evidence: Math.min(100, (canonicalEvidence.filter(e => e.confidence === "high").length / Math.max(canonicalEvidence.length, 1)) * 100),
+      skills: techStackMatch.length > 0 ? Math.min(100, (techStackMatch.length / Math.max(analysis.tech_stack.length, 1)) * 100) : 40,
+      seniority: normalizedSeniority === "Senior" || normalizedSeniority === "Lead" ? 70 : 50,
+      ats: keywordMatches.length > 0 ? Math.min(100, (keywordMatches.length / Math.max(analysis.keywords.length, 1)) * 100) : 40,
+    }
+    
+    // Get role-aware weights
+    const inferredRole = inferRoleFromJobTitle(analysis.title)
+    const weights = getWeightsForRole(inferredRole)
+    const roleAwareScore = calculateWeightedScore(dimensionScores, weights)
+    
+    // Calculate explainable fit using canonical evidence
+    const explainableFit: ExplainableFitScore = calculateExplainableFit(
+      canonicalEvidence,
+      analysis.qualifications_required,
+      analysis.qualifications_preferred,
+      dimensionScores
+    )
+    
+    // Convert fit band to legacy fit format for backwards compatibility
+    const fitBandToLegacy: Record<FitBand, "HIGH" | "MEDIUM" | "LOW"> = {
+      "strong_match": "HIGH",
+      "moderate_match": "MEDIUM",
+      "stretch_but_viable": "MEDIUM",
+      "low_match": "LOW",
+    }
+    
+    // Use the explainable score but keep legacy format for compatibility
+    const fitResult = {
+      fit: fitBandToLegacy[explainableFit.band],
+      score: explainableFit.score,
+      reasoning: [
+        ...explainableFit.strengths.slice(0, 3).map(s => `Strong: ${s.requirement.slice(0, 50)}`),
+        ...explainableFit.gaps.filter(g => g.severity === "critical").slice(0, 2).map(g => `Gap: ${g.requirement.slice(0, 50)}`),
+      ],
+    }
+    
+    // Store the full explainable fit for the UI
+    const roleAwareFit = {
+      inferredRole,
+      weights,
+      fit: fitResult.fit,
+      score: fitResult.score,
+      reasoning: fitResult.reasoning,
+    }
 
     // Create job record with new fields
     const { data: job, error: insertError } = await supabase
@@ -335,14 +441,33 @@ Extract the job details following the schema. Be accurate with the role_family c
         role_family: analysis.role_family,
         industry_guess: analysis.industry_guess || "Unknown",
         seniority_level: normalizedSeniority,
-        // Initial scoring
-        fit: fitResult.fit,
-        score: fitResult.score,
-        score_strengths: fitResult.reasoning.filter(r => !r.includes("not")),
-        score_gaps: fitResult.reasoning.filter(r => r.includes("not")),
-        status: "analyzed",
-        analyzed_at: new Date().toISOString(),
-      })
+    // Initial scoring with role-aware weights
+    fit: fitResult.fit,
+    score: fitResult.score,
+    score_strengths: fitResult.reasoning.filter(r => !r.includes("gap")),
+    score_gaps: fitResult.reasoning.filter(r => r.includes("gap")),
+    // Store full explainable scoring metadata in score_reasoning jsonb
+    score_reasoning: {
+      inferred_role: roleAwareFit.inferredRole,
+      weights: roleAwareFit.weights,
+      dimension_scores: dimensionScores,
+      scoring_version: "3.0-explainable",
+      // Explainable fit data
+      fit_band: explainableFit.band,
+      confidence: explainableFit.confidence,
+      matched_requirements: explainableFit.matched_requirements_count,
+      partial_matches: explainableFit.partial_matches_count,
+      missing_requirements: explainableFit.missing_requirements_count,
+      total_requirements: explainableFit.total_requirements_count,
+      score_explanation: explainableFit.score_explanation,
+      strengths: explainableFit.strengths.slice(0, 5), // Top 5 strengths
+      gaps: explainableFit.gaps.slice(0, 5), // Top 5 gaps
+      warnings: explainableFit.warnings,
+      evidence_count: canonicalEvidence.length,
+    },
+    status: "analyzed",
+    analyzed_at: new Date().toISOString(),
+    })
       .select()
       .single()
 
@@ -412,8 +537,32 @@ Extract the job details following the schema. Be accurate with the role_family c
         industry_guess: analysis.industry_guess || "Unknown",
         fit_signals: analysis.fit_signals,
       },
-      initial_fit: fitResult,
-      job: updatedJob || job,
+    initial_fit: fitResult,
+    // Explainable fit with full transparency
+    explainable_fit: {
+      band: explainableFit.band,
+      score: explainableFit.score,
+      confidence: explainableFit.confidence,
+      matched_requirements: explainableFit.matched_requirements_count,
+      partial_matches: explainableFit.partial_matches_count,
+      missing_requirements: explainableFit.missing_requirements_count,
+      total_requirements: explainableFit.total_requirements_count,
+      score_explanation: explainableFit.score_explanation,
+      strengths: explainableFit.strengths,
+      gaps: explainableFit.gaps,
+      warnings: explainableFit.warnings,
+    },
+    role_aware_scoring: {
+      inferred_role: roleAwareFit.inferredRole,
+      weights: roleAwareFit.weights,
+      dimension_scores: dimensionScores,
+    },
+    evidence_summary: {
+      total_evidence_items: canonicalEvidence.length,
+      high_confidence_items: canonicalEvidence.filter(e => e.confidence === "high").length,
+      approved_for_resume: canonicalEvidence.filter(e => e.approved_for_resume).length,
+    },
+    job: updatedJob || job,
       // Include generation status so UI knows what happened
       generation: {
         attempted: orchestration.generation?.attempted || false,

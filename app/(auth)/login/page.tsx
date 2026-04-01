@@ -88,7 +88,9 @@ function LoginForm() {
         email,
         password,
       })
+      
       if (error) throw error
+      
       router.push(redirectTo)
       router.refresh()
     } catch (err: unknown) {

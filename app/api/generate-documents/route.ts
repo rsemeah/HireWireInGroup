@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateText, generateObject } from "ai"
-import { createGroq } from "@ai-sdk/groq"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { groq, isGroqConfigured, MODELS } from "@/lib/adapters/groq"
+import { GenerateDocumentsInputSchema } from "@/lib/schemas/job-intake"
 import {
   BANNED_PHRASES,
   detectBannedPhrases,
@@ -18,6 +19,12 @@ import {
   type ParagraphProvenance,
 } from "@/lib/truthserum"
 import {
+  detectUnsafeMetrics,
+  classifyQuantificationSafety,
+  rewriteToQualitative,
+  type QuantificationSafety,
+} from "@/lib/canonical-evidence"
+import {
   runPreGenerationEnhancement,
   generateProjectsSection,
 } from "@/lib/bullet-enhancer"
@@ -31,10 +38,6 @@ import {
   getTemplateGuidance,
 } from "@/lib/resume-templates"
 import { sanitizeInput } from "@/lib/safety"
-
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-})
 
 // Schema for evidence mapping
 const EvidenceMapSchema = z.object({
@@ -194,20 +197,24 @@ Return an error explaining why generation was blocked.`
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { job_id, selected_evidence_ids, _retry_count = 0 } = body
-    const isRetry = _retry_count > 0
-    const MAX_RETRIES = 1 // Auto-retry once if quality check fails
-
-    if (!job_id) {
+    const { selected_evidence_ids, _retry_count = 0 } = body
+    
+    // Validate input
+    const parseResult = GenerateDocumentsInputSchema.safeParse(body)
+    if (!parseResult.success) {
       return NextResponse.json(
-        { success: false, error: "job_id is required" },
+        { success: false, error: parseResult.error.errors[0]?.message || "Invalid input" },
         { status: 400 }
       )
     }
+    
+    const { job_id } = parseResult.data
+    const isRetry = _retry_count > 0
+    const MAX_RETRIES = 1 // Auto-retry once if quality check fails
 
-    if (!process.env.GROQ_API_KEY) {
+    if (!isGroqConfigured()) {
       return NextResponse.json(
-        { success: false, error: "GROQ_API_KEY not configured" },
+        { success: false, error: "AI service not configured" },
         { status: 500 }
       )
     }
@@ -246,12 +253,31 @@ export async function POST(request: NextRequest) {
       loadSourceResume(supabase, user.id),
     ])
 
-    if (!profile) {
+    // If no profile exists, create a minimal one or use source resume data
+    if (!profile && !sourceResume?.parsed_data) {
+      // Update job status to indicate why generation failed
+      await supabase
+        .from("jobs")
+        .update({
+          status: "needs_review",
+          generation_status: "failed",
+          generation_error: "profile_required",
+        })
+        .eq("id", job_id)
+        .eq("user_id", user.id)
+      
       return NextResponse.json(
-        { success: false, error: "User profile not found. Please complete your profile first." },
+        { 
+          success: false, 
+          error: "profile_required",
+          user_message: "Please complete your profile or upload a resume before generating materials."
+        },
         { status: 400 }
       )
     }
+    
+    // Allow generation with just source resume if profile is missing
+    const hasUsableData = profile || sourceResume?.parsed_data
 
     if (!jobData) {
       return NextResponse.json(
@@ -411,7 +437,7 @@ ${(jobData.raw_description as string).slice(0, 3000)}` : ""}
 
     // Step 1: Create evidence map and determine strategy
     const { object: evidenceMap } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq(MODELS.VERSATILE),
       schema: EvidenceMapSchema,
       prompt: `Analyze the match between this candidate and job opportunity.
 
@@ -476,7 +502,7 @@ Be conservative - only include matches that are clearly supported by the evidenc
     // Step 2: Generate resume with bullet-level provenance
     // SIMPLIFIED: Reduced prompt verbosity to produce more natural, human-sounding output
     const { object: resumeWithProvenance } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq(MODELS.VERSATILE),
       schema: ResumeWithProvenanceSchema,
       prompt: `Write resume content for this job application. Sound like a sharp professional, not a bot.
 
@@ -501,13 +527,31 @@ WRITING RULES:
 5. Write like a human professional would - confident but not robotic
 6. If pre-approved bullets exist in evidence, use them directly
 
+QUANTIFICATION POLICY - CRITICAL:
+ALLOWED metrics:
+- Numbers explicitly stated in the evidence (exact amounts, percentages, counts)
+- Deterministic derivations ("team of 5 across 3 regions")
+- Factual counts from evidence (number of products, countries, users if stated)
+
+NOT ALLOWED - DO NOT INVENT:
+- Percentages like "reduced churn by 25%" unless explicitly in evidence
+- Time savings like "saved 40 hours/week" unless explicitly in evidence
+- Revenue impact like "generated $2M" unless explicitly in evidence
+- Improvement claims like "improved efficiency by 30%" unless explicitly in evidence
+
+IF NO METRIC IN EVIDENCE, use qualitative language instead:
+- "Reduced manual work" (not "reduced by 60%")
+- "Improved visibility" (not "increased by 45%")
+- "Strengthened stakeholder alignment" (not "improved satisfaction by 90%")
+- "Accelerated delivery" (not "reduced time by 50%")
+
 KEEP IT SPECIFIC:
-- Use exact numbers: "team of 5" not "team"
+- Use exact numbers ONLY when in evidence: "team of 5" not "team"
 - Name tools: "React, PostgreSQL" not "modern stack"
-- Include scale: "50K users" not "users"
+- Include scale ONLY if in evidence: "50K users" not "users"
 - Preserve industry: "B2B fintech" not "software"
 
-Write 5-8 achievement bullets that the candidate could confidently discuss in an interview.`,
+Write 5-8 achievement bullets that the candidate could confidently discuss in an interview. Every metric must be traceable to evidence.`,
     })
 
     // Step 2.5: PRE-GENERATION ENHANCEMENT PASS
@@ -553,7 +597,7 @@ Write 5-8 achievement bullets that the candidate could confidently discuss in an
     // Step 3: Generate cover letter with paragraph provenance
     // SIMPLIFIED: More direct prompt for natural, human-sounding cover letters
     const { object: coverLetterWithProvenance } = await generateObject({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq(MODELS.VERSATILE),
       schema: CoverLetterWithProvenanceSchema,
       prompt: `Write a cover letter for this role. Sound confident and human, not like a template.
 
@@ -651,13 +695,29 @@ ${signatureBlock}`
     }))
     
     const weakBullets = bulletAnalysis.filter(b => !b.is_concrete_enough)
+    
+    // QUANTIFICATION SAFETY CHECK - Detect and flag unsafe invented metrics
+    const unsafeMetricsFound: { bullet: string; unsafe_claims: string[]; safe_alternatives: string[] }[] = []
+    
+    for (const bullet of enhancedBullets) {
+      const { has_unsafe, unsafe_claims, safe_alternatives } = detectUnsafeMetrics(bullet.bullet_text)
+      if (has_unsafe) {
+        unsafeMetricsFound.push({
+          bullet: bullet.bullet_text,
+          unsafe_claims,
+          safe_alternatives,
+        })
+      }
+    }
+    
+    // Unsafe metrics will be flagged in quality issues
 
     // Step 5: AI Quality check - use smaller model to avoid rate limits
     // Wrapped in try-catch since smaller models can sometimes fail schema compliance
     let qualityCheck: z.infer<typeof QualityCheckSchema>
     try {
       const result = await generateObject({
-        model: groq("llama-3.1-8b-instant"),
+        model: groq(MODELS.FAST),
         schema: QualityCheckSchema,
         prompt: `You are a resume quality reviewer. Analyze the generated documents and return a JSON object with your findings.
 
@@ -718,10 +778,11 @@ If no issues found, return empty arrays and overall_passed: true.`,
       unsupported_language: detectBannedPhrases(p.paragraph_text)
     }))
 
-    // Calculate quality score
+    // Calculate quality score - now includes quantification safety
     const qualityPassed = qualityCheck.overall_passed && 
       allBannedPhrases.length === 0 && 
-      weakBullets.length <= 1
+      weakBullets.length <= 1 &&
+      unsafeMetricsFound.length === 0 // Block if we detected invented metrics
 
     const qualityScore = qualityPassed ? 100 : Math.max(0, 
       100 - 
@@ -786,12 +847,13 @@ If no issues found, return empty arrays and overall_passed: true.`,
         generation_status: qualityPassed ? "ready" : "needs_review",
         generation_error: null,
         generation_quality_score: qualityScore,
-        generation_quality_issues: [
-          ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
-          ...vaguePatterns.map(p => `Vague pattern: "${p}"`),
-          ...weakBullets.map(b => `Weak bullet (${b.concrete_signal_count}/4 signals): "${b.bullet.substring(0, 50)}..."`),
-          ...qualityCheck.invented_claims,
-          ...qualityCheck.vague_bullets,
+    generation_quality_issues: [
+      ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
+      ...vaguePatterns.map(p => `Vague pattern: "${p}"`),
+      ...weakBullets.map(b => `Weak bullet (${b.concrete_signal_count}/4 signals): "${b.bullet.substring(0, 50)}..."`),
+      ...unsafeMetricsFound.map(m => `UNSAFE METRIC: "${m.unsafe_claims[0]}" - Use instead: "${m.safe_alternatives[0] || 'qualitative language'}"`),
+      ...qualityCheck.invented_claims,
+      ...qualityCheck.vague_bullets,
           ...qualityCheck.ai_filler,
         ],
         quality_passed: qualityPassed,
