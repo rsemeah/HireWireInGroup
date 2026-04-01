@@ -47,6 +47,7 @@ import {
 import { toast } from "sonner"
 import { ExportButtons } from "@/components/export-buttons"
 import { ResumeTemplatePicker, ResumeActionsBar, getRecommendedTemplate } from "@/components/resume-templates"
+import { DeleteJobDialog } from "@/components/delete-job-dialog"
 import { TEMPLATE_CONFIGS } from "@/lib/resume-templates/config/resumeTemplates.config"
 import type { TemplateId } from "@/lib/resume-templates/types/ResumeProps"
 
@@ -790,6 +791,15 @@ export function JobDetail({ job }: JobDetailProps) {
                 Interview Prep
               </Button>
             </Link>
+            
+            {/* Delete Button */}
+            <DeleteJobDialog
+              jobId={job.id}
+              jobTitle={job.title}
+              company={job.company}
+              variant="button"
+              redirectTo="/jobs"
+            />
           </div>
         </CardContent>
       </Card>
