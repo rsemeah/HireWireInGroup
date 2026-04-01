@@ -144,16 +144,7 @@ export default function BillingPage() {
                   }
                 </CardDescription>
               </div>
-              {isPro && (
-                <Button variant="outline" size="sm" onClick={handleManageBilling} disabled={isManaging}>
-                  {isManaging ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <CreditCard className="h-4 w-4 mr-2" />
-                  )}
-                  Manage Billing
-                </Button>
-              )}
+              {/* Manage Billing button hidden until Stripe portal is connected */}
             </div>
           </CardHeader>
           
@@ -166,12 +157,9 @@ export default function BillingPage() {
                 <div className="flex-1">
                   <p className="font-medium">Pro Plan - $19/month</p>
                   <p className="text-sm text-muted-foreground">
-                    Renews automatically. Cancel anytime.
+                    Full access to all HireWire features.
                   </p>
                 </div>
-                <Button variant="ghost" size="sm" onClick={handleManageBilling} disabled={isManaging}>
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
               </div>
             </CardContent>
           ) : (
@@ -313,38 +301,8 @@ export default function BillingPage() {
           )}
         </Card>
 
-        {/* Billing History (placeholder for when Stripe is connected) */}
-        {isPro && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Billing History
-              </CardTitle>
-              <CardDescription>
-                View and download past invoices
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <CreditCard className="h-8 w-8 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">
-                  Access your billing history through the billing portal.
-                </p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-4"
-                  onClick={handleManageBilling}
-                  disabled={isManaging}
-                >
-                  Open Billing Portal
-                  <ExternalLink className="h-3.5 w-3.5 ml-2" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Billing History - Hidden until Stripe is fully connected */}
+        {/* Will be enabled once Stripe portal returns valid URLs */}
       </div>
     </div>
   )
