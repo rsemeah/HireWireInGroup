@@ -17,13 +17,25 @@ export function createClient(): SupabaseClient {
     return supabaseClient
   }
   
-  // Polyfill navigator.locks if not available (fixes "this.lock is not a function" error)
-  if (typeof window !== 'undefined' && !navigator.locks) {
-    // @ts-expect-error - Creating a minimal locks polyfill
-    navigator.locks = {
-      request: async (_name: string, callback: () => Promise<unknown>) => {
-        return callback()
-      },
+  // Polyfill navigator.locks if not available or broken
+  // Fixes "this.lock is not a function" error in certain environments
+  if (typeof window !== 'undefined') {
+    try {
+      // Test if navigator.locks.request works
+      if (!navigator.locks || typeof navigator.locks.request !== 'function') {
+        throw new Error('navigator.locks not available')
+      }
+    } catch {
+      // Create a minimal polyfill that just executes the callback
+      Object.defineProperty(navigator, 'locks', {
+        value: {
+          request: async <T>(_name: string, callback: () => Promise<T>): Promise<T> => {
+            return callback()
+          },
+        },
+        writable: true,
+        configurable: true,
+      })
     }
   }
   
