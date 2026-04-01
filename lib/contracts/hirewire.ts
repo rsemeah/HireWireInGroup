@@ -38,19 +38,20 @@ export interface PlanLimits {
   custom_templates: boolean
 }
 
+// Launch-safe limits (Enterprise removed from UI, kept here for type safety)
 export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   free: {
     jobs_per_month: 5,
-    generations_per_month: 3,
-    exports_per_month: 3,
-    evidence_items: 10,
+    generations_per_month: 5,
+    exports_per_month: -1, // Not tracked - removed from UI
+    evidence_items: -1, // Unlimited for free - low cost, high engagement
     interview_prep: false,
     priority_support: false,
     custom_templates: false,
   },
   pro: {
-    jobs_per_month: 50,
-    generations_per_month: 50,
+    jobs_per_month: -1, // unlimited
+    generations_per_month: -1, // unlimited
     exports_per_month: -1, // unlimited
     evidence_items: -1, // unlimited
     interview_prep: true,
@@ -58,6 +59,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     custom_templates: true,
   },
   enterprise: {
+    // Enterprise kept for type safety but hidden from UI
     jobs_per_month: -1,
     generations_per_month: -1,
     exports_per_month: -1,

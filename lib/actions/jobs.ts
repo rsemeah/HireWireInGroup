@@ -288,11 +288,18 @@ export async function getJobs(): Promise<JobsResult> {
       return { success: false, error: "Not authenticated" }
     }
 
+    // Fetch jobs with their scores from job_scores table
     const { data, error } = await supabase
       .from("jobs")
-      .select("*")
-      .eq("user_id", user.id) // Explicit filter for safety
-      .order("score", { ascending: false, nullsFirst: false })
+      .select(`
+        *,
+        job_scores (
+          overall_score,
+          confidence_score
+        )
+      `)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching jobs:", error)
@@ -390,9 +397,19 @@ export async function getJobStats(): Promise<StatsResult> {
       }
     }
 
+    // Query jobs with their scores from job_scores table
     const { data, error } = await supabase
       .from("jobs")
-      .select("status, fit, source, score, created_at")
+      .select(`
+        id,
+        status,
+        source,
+        created_at,
+        job_scores (
+          overall_score,
+          confidence_score
+        )
+      `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
@@ -417,9 +434,17 @@ export async function getJobStats(): Promise<StatsResult> {
       return acc
     }, {} as Record<string, number>)
 
+    // Derive fit from job_scores
     const byFit = jobs.reduce((acc, job) => {
-      const currentFit = job.fit || "UNSCORED"
-      acc[currentFit] = (acc[currentFit] || 0) + 1
+      const scores = job.job_scores?.[0]
+      const score = scores?.overall_score
+      let fit = "UNSCORED"
+      if (score !== null && score !== undefined) {
+        if (score >= 75) fit = "HIGH"
+        else if (score >= 50) fit = "MEDIUM"
+        else fit = "LOW"
+      }
+      acc[fit] = (acc[fit] || 0) + 1
       return acc
     }, {} as Record<string, number>)
 

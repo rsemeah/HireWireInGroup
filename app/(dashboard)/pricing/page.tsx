@@ -42,6 +42,7 @@ interface PricingTier {
   ctaVariant: "default" | "outline" | "secondary"
 }
 
+// Launch with 2 tiers only - Enterprise removed until B2B features exist
 const PRICING_TIERS: PricingTier[] = [
   {
     name: "Free",
@@ -51,14 +52,13 @@ const PRICING_TIERS: PricingTier[] = [
     planType: "free",
     features: [
       { label: "Jobs per month", included: true, limit: "5" },
-      { label: "Document generations", included: true, limit: "3" },
-      { label: "Exports per month", included: true, limit: "3" },
-      { label: "Evidence library items", included: true, limit: "10" },
+      { label: "Document generations", included: true, limit: "5" },
+      { label: "Evidence library items", included: true, limit: "Unlimited" },
       { label: "Job analysis & scoring", included: true },
       { label: "Basic dashboard", included: true },
       { label: "Interview prep", included: false },
       { label: "AI Career Coach", included: false },
-      { label: "Custom templates", included: false },
+      { label: "Advanced analytics", included: false },
       { label: "Priority support", included: false },
     ],
     cta: "Current Plan",
@@ -74,38 +74,15 @@ const PRICING_TIERS: PricingTier[] = [
     features: [
       { label: "Jobs per month", included: true, limit: "Unlimited" },
       { label: "Document generations", included: true, limit: "Unlimited" },
-      { label: "Exports per month", included: true, limit: "Unlimited" },
       { label: "Evidence library items", included: true, limit: "Unlimited" },
       { label: "Job analysis & scoring", included: true },
       { label: "Full analytics dashboard", included: true },
       { label: "Interview prep", included: true },
       { label: "AI Career Coach", included: true },
-      { label: "Custom templates", included: true },
       { label: "Priority support", included: true },
     ],
     cta: "Upgrade to Pro",
     ctaVariant: "default",
-  },
-  {
-    name: "Enterprise",
-    description: "For teams and organizations",
-    price: "Custom",
-    period: "contact us",
-    planType: "enterprise",
-    features: [
-      { label: "Everything in Pro", included: true },
-      { label: "Team management", included: true },
-      { label: "SSO & SAML", included: true },
-      { label: "Custom integrations", included: true },
-      { label: "Dedicated account manager", included: true },
-      { label: "SLA guarantee", included: true },
-      { label: "Custom AI training", included: true },
-      { label: "White-label options", included: true },
-      { label: "API access", included: true },
-      { label: "On-premise deployment", included: true },
-    ],
-    cta: "Contact Sales",
-    ctaVariant: "secondary",
   },
 ]
 
@@ -190,7 +167,7 @@ export default function PricingPage() {
       </div>
 
       {/* Pricing Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16 max-w-3xl mx-auto">
         {PRICING_TIERS.map((tier) => {
           const isCurrentPlan = currentPlan === tier.planType
           const canUpgrade = !isPro && tier.planType === "pro"

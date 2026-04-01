@@ -1,5 +1,6 @@
 "use client"
 
+// Premium subscription management hook
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { 
@@ -66,14 +67,20 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      // Check user's plan from profiles table (using existing is_premium field)
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_premium, premium_since")
+      // Check user's plan from users table (canonical source)
+      const { data: userData } = await supabase
+        .from("users")
+        .select("plan_type, subscription_status")
         .eq("id", user.id)
         .single()
       
-      const userPlan: PlanType = profile?.is_premium ? "pro" : "free"
+      // Determine plan: check users.plan_type first, fall back to subscription status
+      let userPlan: PlanType = "free"
+      if (userData?.plan_type === "pro" || userData?.plan_type === "enterprise") {
+        userPlan = userData.plan_type as PlanType
+      } else if (userData?.subscription_status === "active") {
+        userPlan = "pro"
+      }
       setPlan(userPlan)
       
       const limits = PLAN_LIMITS[userPlan]
@@ -89,13 +96,12 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
         .eq("user_id", user.id)
         .gte("created_at", monthStart)
       
-      // Count generations this month (from generated_documents or jobs with generated content)
+      // Count generations this month from generated_documents table (canonical source)
       const { count: generationsCount } = await supabase
-        .from("jobs")
+        .from("generated_documents")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user.id)
-        .not("generated_resume", "is", null)
-        .gte("generation_timestamp", monthStart)
+        .gte("created_at", monthStart)
       
       // Count evidence items
       const { count: evidenceCount } = await supabase
