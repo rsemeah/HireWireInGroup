@@ -105,7 +105,19 @@ function createCoachTools(userId: string) {
         const supabase = await createClient()
         let query = supabase
           .from("jobs")
-          .select("id, company_name, job_title, status, fit_score, created_at, applied_at")
+          .select(`
+            id,
+            company_name,
+            role_title,
+            status,
+            created_at,
+            job_scores (
+              overall_score
+            ),
+            applications (
+              applied_at
+            )
+          `)
           .eq("user_id", userId)
           .order("created_at", { ascending: false })
         
@@ -114,7 +126,13 @@ function createCoachTools(userId: string) {
         }
         
         const { data } = await query.limit(20)
-        return data || []
+        // Transform to expected format
+        return (data || []).map(job => ({
+          ...job,
+          job_title: job.role_title,
+          fit_score: job.job_scores?.[0]?.overall_score || null,
+          applied_at: job.applications?.[0]?.applied_at || null,
+        }))
       },
     }),
 
@@ -143,10 +161,15 @@ function createCoachTools(userId: string) {
       execute: async () => {
         const supabase = await createClient()
         
-        // Get pipeline summary
+        // Get pipeline summary with scores from job_scores table
         const { data: jobs } = await supabase
           .from("jobs")
-          .select("status, fit_score")
+          .select(`
+            status,
+            job_scores (
+              overall_score
+            )
+          `)
           .eq("user_id", userId)
         
         const { data: evidence } = await supabase

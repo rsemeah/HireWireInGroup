@@ -124,9 +124,19 @@ export default async function LogsPage() {
   }
 
   // Always fetch recent jobs for fallback/enrichment - filtered by user
+  // Use correct column names: role_title, company_name (not title, company)
   const { data: recentJobs, error: jobsError } = await supabase
     .from("jobs")
-    .select("id, title, company, status, fit, score, created_at")
+    .select(`
+      id,
+      role_title,
+      company_name,
+      status,
+      created_at,
+      job_scores (
+        overall_score
+      )
+    `)
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(50)
