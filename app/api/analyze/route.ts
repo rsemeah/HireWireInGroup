@@ -16,6 +16,7 @@ import { groq, isGroqConfigured, MODELS } from "@/lib/adapters/groq"
 import { AnalyzeJobInputSchema } from "@/lib/schemas/job-intake"
 import { parseJobPage, detectSource } from "@/lib/parsers"
 import { findJobByUrl } from "@/lib/queries/jobs"
+import type { Job } from "@/lib/types"
 import { linkJobToCompany } from "@/lib/company-utils"
 import { checkForDuplicate, getDuplicateResponse } from "@/lib/duplicate-detection"
 
@@ -185,8 +186,17 @@ function calculateRoleAwareFit(
   const inferredRole = inferRoleFromJobTitle(jobTitle)
   const weights = getWeightsForRole(inferredRole)
   
+  // Map short keys to full keys expected by calculateWeightedScore
+  const mappedScores = {
+    experience_relevance: dimensionScores.experience,
+    evidence_quality: dimensionScores.evidence,
+    skills_match: dimensionScores.skills,
+    seniority_alignment: dimensionScores.seniority,
+    ats_keywords: dimensionScores.ats,
+  }
+  
   // Calculate weighted score
-  const score = calculateWeightedScore(dimensionScores, weights)
+  const score = calculateWeightedScore(mappedScores, weights)
   
   // Generate reasoning based on which dimensions contributed most
   const reasoning: string[] = []
@@ -250,7 +260,7 @@ export async function POST(request: NextRequest) {
     const source = detectSource(job_url)
 
     // Check for existing job with this URL (using extracted query)
-    const { data: existingJob } = await findJobByUrl(supabase, user.id, job_url)
+    const { data: existingJob } = await findJobByUrl(supabase, user.id, job_url) as { data: Job | null; error: unknown }
 
     if (existingJob) {
       // Return full analysis data for duplicates so UI can render properly
@@ -432,7 +442,16 @@ Extract the job details following the schema. Be accurate with the role_family c
     // Get role-aware weights
     const inferredRole = inferRoleFromJobTitle(analysis.title)
     const weights = getWeightsForRole(inferredRole)
-    const roleAwareScore = calculateWeightedScore(dimensionScores, weights)
+    
+    // Map short keys to full keys expected by calculateWeightedScore
+    const mappedDimensionScores = {
+      experience_relevance: dimensionScores.experience,
+      evidence_quality: dimensionScores.evidence,
+      skills_match: dimensionScores.skills,
+      seniority_alignment: dimensionScores.seniority,
+      ats_keywords: dimensionScores.ats,
+    }
+    const roleAwareScore = calculateWeightedScore(mappedDimensionScores, weights)
     
     // Calculate explainable fit using canonical evidence
     const explainableFit: ExplainableFitScore = calculateExplainableFit(
