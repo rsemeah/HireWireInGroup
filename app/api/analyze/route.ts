@@ -16,6 +16,9 @@ import { groq, isGroqConfigured, MODELS } from "@/lib/adapters/groq"
 import { AnalyzeJobInputSchema } from "@/lib/schemas/job-intake"
 import { parseJobPage, detectSource } from "@/lib/parsers"
 import { findJobByUrl } from "@/lib/queries/jobs"
+import type { Job } from "@/lib/types"
+import { linkJobToCompany } from "@/lib/company-utils"
+import { checkForDuplicate, getDuplicateResponse } from "@/lib/duplicate-detection"
 
 // Role families for categorization - PM-focused but extensible
 const ROLE_FAMILIES = [
@@ -183,8 +186,17 @@ function calculateRoleAwareFit(
   const inferredRole = inferRoleFromJobTitle(jobTitle)
   const weights = getWeightsForRole(inferredRole)
   
+  // Map short keys to full keys expected by calculateWeightedScore
+  const mappedScores = {
+    experience_relevance: dimensionScores.experience,
+    evidence_quality: dimensionScores.evidence,
+    skills_match: dimensionScores.skills,
+    seniority_alignment: dimensionScores.seniority,
+    ats_keywords: dimensionScores.ats,
+  }
+  
   // Calculate weighted score
-  const score = calculateWeightedScore(dimensionScores, weights)
+  const score = calculateWeightedScore(mappedScores, weights)
   
   // Generate reasoning based on which dimensions contributed most
   const reasoning: string[] = []
@@ -248,7 +260,7 @@ export async function POST(request: NextRequest) {
     const source = detectSource(job_url)
 
     // Check for existing job with this URL (using extracted query)
-    const { data: existingJob } = await findJobByUrl(supabase, user.id, job_url)
+    const { data: existingJob } = await findJobByUrl(supabase, user.id, job_url) as { data: Job | null; error: unknown }
 
     if (existingJob) {
       // Return full analysis data for duplicates so UI can render properly
@@ -325,6 +337,54 @@ Extract the job details following the schema. Be accurate with the role_family c
     // Normalize seniority level
     const normalizedSeniority = normalizeSeniority(analysis.seniority_level)
     
+    // Check for duplicate based on company + role (more thorough than URL-only check)
+    const duplicateCheck = await checkForDuplicate(
+      supabase,
+      user.id,
+      analysis.company,
+      analysis.title,
+      job_url
+    )
+    
+    if (duplicateCheck.isDuplicate && duplicateCheck.existingJob) {
+      const response = getDuplicateResponse(duplicateCheck)
+      
+      // For exact URL or exact match duplicates, return the existing job
+      if (response.shouldBlock || duplicateCheck.duplicateType === "exact_match") {
+        return NextResponse.json({
+          success: true,
+          job_id: duplicateCheck.existingJobId,
+          duplicate: true,
+          duplicate_type: duplicateCheck.duplicateType,
+          message: response.message,
+          job: {
+            id: duplicateCheck.existingJob.id,
+            title: duplicateCheck.existingJob.title,
+            company: duplicateCheck.existingJob.company,
+            created_at: duplicateCheck.existingJob.created_at,
+            status: duplicateCheck.existingJob.status,
+            source_url: duplicateCheck.existingJob.source_url,
+          },
+          analysis: {
+            title: analysis.title,
+            company: analysis.company,
+            location: analysis.location,
+            employment_type: analysis.employment_type,
+            salary_text: analysis.salary_text,
+            responsibilities: analysis.responsibilities,
+            qualifications_required: analysis.qualifications_required,
+            qualifications_preferred: analysis.qualifications_preferred,
+            keywords: analysis.keywords,
+            ats_phrases: analysis.ats_phrases,
+            tech_stack: analysis.tech_stack,
+            seniority_level: normalizedSeniority,
+            role_family: analysis.role_family,
+            industry_guess: analysis.industry_guess,
+          },
+        })
+      }
+    }
+    
     // Fetch user's evidence library and profile for evidence-based matching
     const [evidenceResult, profileResult] = await Promise.all([
       supabase
@@ -382,7 +442,16 @@ Extract the job details following the schema. Be accurate with the role_family c
     // Get role-aware weights
     const inferredRole = inferRoleFromJobTitle(analysis.title)
     const weights = getWeightsForRole(inferredRole)
-    const roleAwareScore = calculateWeightedScore(dimensionScores, weights)
+    
+    // Map short keys to full keys expected by calculateWeightedScore
+    const mappedDimensionScores = {
+      experience_relevance: dimensionScores.experience,
+      evidence_quality: dimensionScores.evidence,
+      skills_match: dimensionScores.skills,
+      seniority_alignment: dimensionScores.seniority,
+      ats_keywords: dimensionScores.ats,
+    }
+    const roleAwareScore = calculateWeightedScore(mappedDimensionScores, weights)
     
     // Calculate explainable fit using canonical evidence
     const explainableFit: ExplainableFitScore = calculateExplainableFit(
@@ -438,6 +507,19 @@ Extract the job details following the schema. Be accurate with the role_family c
     if (insertError) {
       console.error("Job insert error:", insertError)
       return NextResponse.json({ success: false, error: "Failed to save job" }, { status: 500 })
+    }
+
+    // Link job to company (creates company if needed)
+    const companyResult = await linkJobToCompany(
+      supabase,
+      user.id,
+      job.id,
+      analysis.company,
+      { industry: analysis.industry_guess || undefined }
+    )
+    if ("error" in companyResult) {
+      console.error("Company link error:", companyResult.error)
+      // Non-fatal - continue without company link
     }
 
     // Insert job analysis data into job_analyses table

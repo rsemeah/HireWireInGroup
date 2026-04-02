@@ -24,6 +24,7 @@ import {
   rewriteToQualitative,
   type QuantificationSafety,
 } from "@/lib/canonical-evidence"
+import type { EvidenceRecord } from "@/lib/types"
 import {
   runPreGenerationEnhancement,
   generateProjectsSection,
@@ -332,7 +333,7 @@ export async function POST(request: NextRequest) {
       : filterEvidenceForCoverLetter(allEvidence)
 
     // Log what evidence was filtered out and why
-    const blockedEvidence = allEvidence.filter((e: { id: string }) => {
+    const blockedEvidence = allEvidence.filter((e: EvidenceRecord) => {
       const rule = getEvidenceUsageRule(e)
       return rule === "blocked" || rule === "interview_only"
     })
@@ -872,7 +873,7 @@ If no issues found, return empty arrays and overall_passed: true.`,
           selected_evidence_ids: resumeEvidence.map((e: { id: string }) => e.id),
           bullet_provenance: bulletProvenance,
           paragraph_provenance: paragraphProvenance,
-          blocked_evidence: blockedEvidence.map((e: { id: string; source_title: string }) => ({ id: e.id, title: e.source_title, reason: getEvidenceUsageRule(e) }))
+blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title: e.source_title, reason: getEvidenceUsageRule(e) }))
         },
         status: qualityPassed ? "ready" : "needs_review",
         scored_at: new Date().toISOString(),

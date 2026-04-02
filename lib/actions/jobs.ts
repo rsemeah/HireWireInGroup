@@ -318,6 +318,7 @@ export async function getJobs(): Promise<JobsResult> {
     }
 
     // Fetch jobs with their scores from job_scores table
+    // Filter out soft-deleted jobs (deleted_at IS NULL)
     const { data, error } = await supabase
       .from("jobs")
       .select(`
@@ -328,6 +329,7 @@ export async function getJobs(): Promise<JobsResult> {
         )
       `)
       .eq("user_id", user.id)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -515,6 +517,7 @@ export async function getJobStats(): Promise<StatsResult> {
     }
 
     // Query jobs with their scores from job_scores table
+    // Filter out soft-deleted jobs
     const { data, error } = await supabase
       .from("jobs")
       .select(`
@@ -528,6 +531,7 @@ export async function getJobStats(): Promise<StatsResult> {
         )
       `)
       .eq("user_id", user.id)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -597,6 +601,76 @@ export async function getJobStats(): Promise<StatsResult> {
       hasWorkflowOutputs: false,
     }
   }
+}
+
+/**
+ * Soft delete a job by setting deleted_at timestamp.
+ * This preserves the job data but removes it from normal views.
+ */
+export async function deleteJob(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  // Soft delete by setting deleted_at
+  const { error } = await supabase
+    .from("jobs")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", user.id) // Ensure user can only delete their own jobs
+
+  if (error) {
+    console.error("Error deleting job:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/jobs")
+  revalidatePath(`/jobs/${id}`)
+  revalidatePath("/")
+  revalidatePath("/companies")
+  revalidatePath("/applications")
+
+  return { success: true }
+}
+
+/**
+ * Restore a soft-deleted job by clearing deleted_at.
+ */
+export async function restoreJob(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  
+  // Get current user
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  if (userError || !user) {
+    return { success: false, error: "Not authenticated" }
+  }
+
+  // Clear deleted_at to restore
+  const { error } = await supabase
+    .from("jobs")
+    .update({ deleted_at: null })
+    .eq("id", id)
+    .eq("user_id", user.id)
+
+  if (error) {
+    console.error("Error restoring job:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/jobs")
+  revalidatePath(`/jobs/${id}`)
+  revalidatePath("/")
+  revalidatePath("/companies")
+
+  return { success: true }
 }
 
 /**
