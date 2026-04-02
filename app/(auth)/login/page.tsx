@@ -84,12 +84,28 @@ function LoginForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       
       if (error) throw error
+      
+      // Check if user has completed onboarding
+      if (authData.user) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("onboarding_complete")
+          .eq("id", authData.user.id)
+          .maybeSingle()
+        
+        // Redirect to onboarding if not complete
+        if (!userData?.onboarding_complete) {
+          router.push("/onboarding")
+          router.refresh()
+          return
+        }
+      }
       
       router.push(redirectTo)
       router.refresh()
