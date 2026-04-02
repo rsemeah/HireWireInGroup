@@ -242,7 +242,21 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleSelectPath = (path: "job" | "evidence" | "explore" | "coach") => {
+  const handleSelectPath = async (path: "job" | "evidence" | "explore" | "coach") => {
+    const supabase = createClient()
+    
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (user) {
+      // Mark onboarding as complete
+      await supabase
+        .from("users")
+        .update({ onboarding_complete: true })
+        .eq("id", user.id)
+    }
+    
+    // Navigate to selected path
     switch (path) {
       case "job":
         router.push("/jobs/new")
