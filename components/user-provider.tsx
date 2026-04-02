@@ -55,10 +55,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       .from("user_profile")
       .select("*")
       .eq("user_id", userId)
-      .single()
+      .maybeSingle()
     
     if (data) {
       setProfile(data as UserProfile)
+    } else {
+      setProfile(null)
     }
   }, [])
 
