@@ -371,12 +371,12 @@ export async function POST(request: NextRequest) {
     } | null
 
     // Merge profile with source resume data (profile takes precedence)
-    const effectiveName = profile.full_name || sourceResumeData?.full_name || "Not provided"
-    const effectiveLocation = profile.location || sourceResumeData?.location || "Not provided"
-    const effectiveSummary = profile.summary || sourceResumeData?.summary || "Not provided"
-    const effectiveSkills = (profile.skills?.length > 0 ? profile.skills : sourceResumeData?.skills) || []
-    const effectiveExperience = (profile.experience?.length > 0 ? profile.experience : sourceResumeData?.experience) || []
-    const effectiveEducation = (profile.education?.length > 0 ? profile.education : sourceResumeData?.education) || []
+    const effectiveName = profile?.full_name || sourceResumeData?.full_name || "Not provided"
+    const effectiveLocation = profile?.location || sourceResumeData?.location || "Not provided"
+    const effectiveSummary = profile?.summary || sourceResumeData?.summary || "Not provided"
+    const effectiveSkills = (profile?.skills?.length > 0 ? profile.skills : sourceResumeData?.skills) || []
+    const effectiveExperience = (profile?.experience?.length > 0 ? profile.experience : sourceResumeData?.experience) || []
+    const effectiveEducation = (profile?.education?.length > 0 ? profile.education : sourceResumeData?.education) || []
 
     const profileContext = `
 CANDIDATE PROFILE:
@@ -627,14 +627,14 @@ Write 5-8 achievement bullets that the candidate could confidently discuss in an
         keywords_used: b.keywords_used,
       })),
       {
-        full_name: profile.full_name,
-        email: profile.email,
-        phone: profile.phone,
-        location: profile.location,
-        summary: profile.summary,
-        skills: profile.skills,
-        links: profile.links as { portfolio?: string; linkedin?: string; github?: string } | undefined,
-        experience: (profile.experience || []).map((exp: { title?: string; company?: string; description?: string }) => ({
+        full_name: effectiveName,
+        email: profile?.email || sourceResumeData?.email || "",
+        phone: profile?.phone || sourceResumeData?.phone || "",
+        location: effectiveLocation,
+        summary: effectiveSummary,
+        skills: effectiveSkills,
+        links: profile?.links as { portfolio?: string; linkedin?: string; github?: string } | undefined,
+        experience: effectiveExperience.map((exp: { title?: string; company?: string; description?: string }) => ({
           title: exp.title || "",
           company: exp.company || "",
           description: exp.description,
@@ -678,10 +678,12 @@ TONE: Write like a sharp professional sending a letter to someone they respect.
     })
 
     // Build final formatted documents - Premium Clean Minimalist format
+    const effectiveEmail = profile?.email || sourceResumeData?.email || ""
+    const effectivePhone = profile?.phone || sourceResumeData?.phone || ""
     const contactInfo = [
-      profile.location,
-      profile.email,
-      profile.phone
+      effectiveLocation,
+      effectiveEmail,
+      effectivePhone
     ].filter(Boolean).join(" | ")
     
     // Use ENHANCED bullets (with product names, metrics, context injected)
@@ -691,7 +693,7 @@ TONE: Write like a sharp professional sending a letter to someone they respect.
     
     // Build ATS-safe formatted resume (no unicode dividers, clean structure)
     // CHANGED: Removed unicode box-drawing characters that break ATS parsing
-    const formattedResume = `${(profile.full_name || "CANDIDATE NAME").toUpperCase()}
+    const formattedResume = `${(effectiveName || "CANDIDATE NAME").toUpperCase()}
 ${contactInfo}
 
 PROFESSIONAL SUMMARY
@@ -706,7 +708,7 @@ CORE COMPETENCIES
 ${resumeWithProvenance.skills_section.join(", ")}
 
 EDUCATION
-${(profile.education || []).map((edu: { degree: string; school: string; year?: string }) => 
+${effectiveEducation.map((edu: { degree: string; school: string; year?: string }) => 
   `${edu.degree}, ${edu.school}${edu.year ? ` (${edu.year})` : ""}`
 ).join("\n")}`
 
@@ -719,9 +721,9 @@ ${(profile.education || []).map((edu: { degree: string; school: string; year?: s
     
     // Build professional signature block with phone number
     const signatureBlock = [
-      profile.full_name || "Candidate",
-      profile.phone ? `Direct: ${profile.phone}` : null,
-      profile.email || null,
+      effectiveName || "Candidate",
+      effectivePhone ? `Direct: ${effectivePhone}` : null,
+      effectiveEmail || null,
     ].filter(Boolean).join("\n")
     
     const formattedCoverLetter = `${today}
