@@ -831,7 +831,7 @@ export function JobDetail({ job }: JobDetailProps) {
                 ) : (
                   <>
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Generate with {TEMPLATE_CONFIGS[selectedTemplateId]?.label || "Template"}
+                    Generate New Resume & Cover Letter
                   </>
                 )}
               </Button>
