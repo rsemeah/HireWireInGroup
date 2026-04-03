@@ -176,7 +176,6 @@ export default function OnboardingPage() {
   }
 
   const handleCreateProfile = async () => {
-    console.log("[v0] handleCreateProfile called, fullName:", fullName)
     if (!fullName.trim()) {
       setError("Please enter your name")
       return
@@ -186,8 +185,7 @@ export default function OnboardingPage() {
     setError(null)
 
     const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    console.log("[v0] getUser result:", user?.id, authError?.message)
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       setError("Not authenticated")
@@ -196,7 +194,6 @@ export default function OnboardingPage() {
     }
 
     try {
-      console.log("[v0] Saving profile to user_profile table")
       // Save profile
       const { error: upsertError } = await supabase
         .from("user_profile")
@@ -211,8 +208,6 @@ export default function OnboardingPage() {
         }, {
           onConflict: "user_id"
         })
-
-      console.log("[v0] Profile upsert result:", upsertError?.message || "success")
       if (upsertError) throw upsertError
 
       // If we have extracted evidence from resume, save it
