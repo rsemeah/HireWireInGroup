@@ -194,21 +194,40 @@ export default function OnboardingPage() {
     }
 
     try {
-      // Save profile
-      const { error: upsertError } = await supabase
+      // Check if profile exists first
+      const { data: existingProfile } = await supabase
         .from("user_profile")
-        .upsert({
-          user_id: user.id,
-          full_name: fullName.trim(),
-          email: user.email,
-          location: location.trim() || null,
-          headline: headline.trim() || null,
-          summary: summary.trim() || null,
-          skills: skills.length > 0 ? skills : null,
-        }, {
-          onConflict: "user_id"
-        })
-      if (upsertError) throw upsertError
+        .select("id")
+        .eq("user_id", user.id)
+        .single()
+
+      const profileData = {
+        user_id: user.id,
+        full_name: fullName.trim(),
+        email: user.email,
+        location: location.trim() || null,
+        headline: headline.trim() || null,
+        summary: summary.trim() || null,
+        skills: skills.length > 0 ? skills : null,
+      }
+
+      let profileError
+      if (existingProfile) {
+        // Update existing profile
+        const { error } = await supabase
+          .from("user_profile")
+          .update(profileData)
+          .eq("user_id", user.id)
+        profileError = error
+      } else {
+        // Insert new profile
+        const { error } = await supabase
+          .from("user_profile")
+          .insert(profileData)
+        profileError = error
+      }
+      
+      if (profileError) throw profileError
 
       // If we have extracted evidence from resume, save it
       if (parsedResume?.extractedEvidence?.length) {
