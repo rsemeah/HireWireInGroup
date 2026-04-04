@@ -57,7 +57,7 @@ export function detectSource(url: string): JobSource {
   if (lowercase.includes("lever.co")) return "LEVER"
   if (lowercase.includes("linkedin.com")) return "LINKEDIN"
   if (lowercase.includes("indeed.com")) return "INDEED"
-  if (lowercase.includes("workday.com")) return "WORKDAY"
+  if (lowercase.includes("workday.com") || lowercase.includes("myworkdayjobs.com")) return "WORKDAY"
   if (lowercase.includes("ashbyhq.com")) return "ASHBY"
   if (lowercase.includes("icims.com")) return "ICIMS"
   if (lowercase.includes("smartrecruiters.com")) return "SMARTRECRUITERS"
