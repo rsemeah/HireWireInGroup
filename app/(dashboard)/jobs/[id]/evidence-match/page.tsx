@@ -94,10 +94,7 @@ export default function EvidenceMatchPage() {
           ats_phrases: analysis?.ats_phrases || [],
           responsibilities: analysis?.responsibilities || [],
         }
-        console.log("[v0] Job loaded with", mergedJob.qualifications_required?.length || 0, "required qualifications")
         setJob(mergedJob as Job)
-      } else {
-        console.log("[v0] Job not found for id:", jobId)
       }
       
       // Fetch all evidence - filtered by user_id for security
@@ -120,12 +117,7 @@ export default function EvidenceMatchPage() {
 
   // Match requirements to evidence when data loads
   useEffect(() => {
-    if (!job || evidence.length === 0) {
-      console.log("[v0] Evidence match skipped - job:", !!job, "evidence count:", evidence.length)
-      return
-    }
-    
-    console.log("[v0] Processing matches - qualifications_required:", job.qualifications_required?.length || 0, "qualifications_preferred:", job.qualifications_preferred?.length || 0)
+    if (!job || evidence.length === 0) return
     
     const matches: RequirementKeywordMatch[] = []
     
@@ -321,6 +313,48 @@ export default function EvidenceMatchPage() {
     return (
       <div className="p-6">
         <p className="text-muted-foreground">Job not found</p>
+      </div>
+    )
+  }
+
+  // Show empty state if user has no evidence
+  if (evidence.length === 0) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Link href={`/jobs/${jobId}`}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold">Evidence Match Console</h1>
+            <p className="text-muted-foreground">{job.role_title || job.title} at {job.company_name || job.company}</p>
+          </div>
+        </div>
+        
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="p-6 text-center">
+            <AlertTriangle className="h-12 w-12 text-amber-600 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-amber-900 mb-2">No Evidence Found</h2>
+            <p className="text-amber-700 mb-4">
+              You need evidence items in your library to match against job requirements. 
+              Evidence is automatically created when you upload your resume during onboarding.
+            </p>
+            <div className="flex justify-center gap-3">
+              <Link href="/evidence">
+                <Button variant="outline">
+                  Manage Evidence Library
+                </Button>
+              </Link>
+              <Link href="/onboarding">
+                <Button>
+                  Upload Resume
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
