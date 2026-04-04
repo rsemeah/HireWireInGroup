@@ -66,16 +66,35 @@ export default function EvidenceMatchPage() {
         return
       }
       
-      // Fetch job - filtered by user_id for security
+      // Fetch job with analysis data (qualifications are in job_analyses)
       const { data: jobData } = await supabase
         .from("jobs")
-        .select("*")
+        .select(`
+          *,
+          job_analyses (
+            qualifications_required,
+            qualifications_preferred,
+            keywords,
+            ats_phrases,
+            responsibilities
+          )
+        `)
         .eq("id", jobId)
         .eq("user_id", user.id)
         .single()
       
       if (jobData) {
-        setJob(jobData as Job)
+        // Merge job_analyses qualifications into job object for easier access
+        const analysis = jobData.job_analyses?.[0]
+        const mergedJob = {
+          ...jobData,
+          qualifications_required: analysis?.qualifications_required || [],
+          qualifications_preferred: analysis?.qualifications_preferred || [],
+          keywords: analysis?.keywords || [],
+          ats_phrases: analysis?.ats_phrases || [],
+          responsibilities: analysis?.responsibilities || [],
+        }
+        setJob(mergedJob as Job)
       }
       
       // Fetch all evidence - filtered by user_id for security
@@ -98,7 +117,12 @@ export default function EvidenceMatchPage() {
 
   // Match requirements to evidence when data loads
   useEffect(() => {
-    if (!job || evidence.length === 0) return
+    if (!job || evidence.length === 0) {
+      console.log("[v0] Evidence match skipped - job:", !!job, "evidence count:", evidence.length)
+      return
+    }
+    
+    console.log("[v0] Processing matches - qualifications_required:", job.qualifications_required?.length || 0, "qualifications_preferred:", job.qualifications_preferred?.length || 0)
     
     const matches: RequirementKeywordMatch[] = []
     
