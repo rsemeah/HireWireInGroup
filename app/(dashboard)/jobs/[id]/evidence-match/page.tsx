@@ -94,7 +94,10 @@ export default function EvidenceMatchPage() {
           ats_phrases: analysis?.ats_phrases || [],
           responsibilities: analysis?.responsibilities || [],
         }
+        console.log("[v0] Job loaded with", mergedJob.qualifications_required?.length || 0, "required qualifications")
         setJob(mergedJob as Job)
+      } else {
+        console.log("[v0] Job not found for id:", jobId)
       }
       
       // Fetch all evidence - filtered by user_id for security
