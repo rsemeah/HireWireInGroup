@@ -317,6 +317,28 @@ export async function POST(request: NextRequest) {
       loadSourceResume(supabase, user.id),
     ])
 
+    // HARD FAIL: Evidence is required for document generation
+    if (!allEvidence || allEvidence.length === 0) {
+      await supabase
+        .from("jobs")
+        .update({
+          status: "needs_review",
+          generation_status: "failed",
+          generation_error: "evidence_required",
+        })
+        .eq("id", job_id)
+        .eq("user_id", user.id)
+      
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "evidence_required",
+          user_message: "No evidence found in your library. Please upload a resume or add evidence manually before generating materials."
+        },
+        { status: 400 }
+      )
+    }
+
     // If no profile exists, create a minimal one or use source resume data
     if (!profile && !sourceResume?.parsed_data) {
       // Update job status to indicate why generation failed
@@ -705,23 +727,28 @@ TONE: Write like a sharp professional sending a letter to someone they respect.
     }))
 
     // Build final formatted documents - Premium Clean Minimalist format
-    const effectiveEmail = profile?.email || sourceResumeData?.email || ""
-    const effectivePhone = profile?.phone || sourceResumeData?.phone || ""
-    const contactInfo = [
-      effectiveLocation,
-      effectiveEmail,
-      effectivePhone
-    ].filter(Boolean).join(" | ")
-    
-    // Use ENHANCED bullets (with product names, metrics, context injected)
-    const experienceBullets = enhancedBullets
-      .map(b => `• ${b.bullet_text}`)
-      .join("\n")
-    
-    // Build ATS-safe formatted resume (no unicode dividers, clean structure)
-    // CHANGED: Removed unicode box-drawing characters that break ATS parsing
-    const formattedResume = `${(effectiveName || "CANDIDATE NAME").toUpperCase()}
-${contactInfo}
+  const effectiveEmail = profile?.email || sourceResumeData?.email || ""
+  const effectivePhone = profile?.phone || sourceResumeData?.phone || ""
+  const contactInfo = [
+  effectiveLocation,
+  effectiveEmail,
+  effectivePhone
+  ].filter(Boolean).join(" | ")
+  
+  // TARGET ROLE: Use the job title being applied to for resume alignment
+  const targetJobTitle = jobData?.title || jobData?.role_title || jobAnalysis?.title || "Professional"
+  
+  // Use ENHANCED bullets (with product names, metrics, context injected)
+  const experienceBullets = enhancedBullets
+  .map(b => `• ${b.bullet_text}`)
+  .join("\n")
+  
+  // Build ATS-safe formatted resume (no unicode dividers, clean structure)
+  // CHANGED: Removed unicode box-drawing characters that break ATS parsing
+  // CHANGED: Added job title as professional headline for alignment
+  const formattedResume = `${(effectiveName || "CANDIDATE NAME").toUpperCase()}
+  ${targetJobTitle}
+  ${contactInfo}
 
 PROFESSIONAL SUMMARY
 ${resumeWithProvenance.summary}

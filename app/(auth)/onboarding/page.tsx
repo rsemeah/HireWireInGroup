@@ -23,23 +23,10 @@ import {
 } from "lucide-react"
 import { HireWireLogo } from "@/components/hirewire-logo"
 import { toast } from "sonner"
+import { normalizeParsedResume } from "@/lib/resume/normalizeParsedResume"
+import type { ParsedResumeData } from "@/types/resume"
 
 type OnboardingStep = "welcome" | "resume" | "profile" | "complete"
-
-interface ParsedResumeData {
-  full_name: string | null
-  email: string | null
-  phone: string | null
-  location: string | null
-  summary: string | null
-  skills: string[]
-  experience: Array<{
-    title: string
-    company: string
-    description?: string
-    bullets?: string[]
-  }>
-}
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<OnboardingStep>("welcome")
@@ -58,7 +45,7 @@ export default function OnboardingPage() {
   const [summary, setSummary] = useState("")
   const [skills, setSkills] = useState<string[]>([])
 
-  // Handle resume file upload
+  // Handle resume file upload with proper evidence creation
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -67,40 +54,62 @@ export default function OnboardingPage() {
     setError(null)
 
     try {
+      // Step 1: Upload and parse resume
       const formData = new FormData()
       formData.append("file", file)
       formData.append("replaceExisting", "true")
 
-      const response = await fetch("/api/resume/upload", {
+      const uploadRes = await fetch("/api/resume/upload", {
         method: "POST",
         body: formData,
         credentials: "include",
       })
 
-      const result = await response.json()
+      const uploadJson = await uploadRes.json()
 
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to parse resume")
+      if (!uploadRes.ok) {
+        throw new Error(uploadJson.error || "Failed to upload resume")
       }
 
-      const parsed = result.resume?.parsed_data as ParsedResumeData | undefined
-      if (parsed) {
-        // Pre-fill form fields
-        if (parsed.full_name) setFullName(parsed.full_name)
-        if (parsed.location) setLocation(parsed.location)
-        if (parsed.summary) setSummary(parsed.summary)
-        if (parsed.skills?.length) setSkills(parsed.skills.slice(0, 10))
-        
-        setParsedResume(parsed)
-        setHasResume(true)
+      // Step 2: Normalize the parsed resume data
+      const rawParsed = uploadJson.resume?.parsed_data || uploadJson.parsedResume || {}
+      const normalized = normalizeParsedResume(rawParsed)
+
+      // Step 3: Create evidence from normalized resume - DO NOT advance until this succeeds
+      const evidenceRes = await fetch("/api/evidence/from-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parsedResume: normalized }),
+        credentials: "include",
+      })
+
+      const evidenceJson = await evidenceRes.json()
+
+      if (!evidenceRes.ok) {
+        throw new Error(evidenceJson.error || "Failed to create evidence from resume")
+      }
+
+      if (!evidenceJson.createdCount || evidenceJson.createdCount === 0) {
+        throw new Error("No evidence could be extracted from your resume. Please ensure it contains work experience, education, or skills.")
+      }
+
+      // Step 4: Pre-fill form fields from normalized data
+      if (normalized.fullName) setFullName(normalized.fullName)
+      if (normalized.location) setLocation(normalized.location)
+      if (normalized.summary) setSummary(normalized.summary)
+      if (normalized.skills?.length) {
+        setSkills(normalized.skills.slice(0, 10).map(s => s.name))
       }
       
-      toast.success("Resume uploaded successfully!")
+      setParsedResume(normalized)
+      setHasResume(true)
+      
+      toast.success(`Resume uploaded! ${evidenceJson.createdCount} evidence items created.`)
       setStep("profile")
     } catch (err) {
-      console.error("Resume parse error:", err)
-      setError(err instanceof Error ? err.message : "Failed to parse resume")
-      toast.error("Failed to parse resume")
+      console.error("[onboarding] resume upload flow failed:", err)
+      setError(err instanceof Error ? err.message : "Failed to process resume")
+      toast.error(err instanceof Error ? err.message : "Failed to process resume")
     } finally {
       setIsParsingResume(false)
     }
@@ -159,26 +168,8 @@ export default function OnboardingPage() {
       
       if (profileError) throw profileError
 
-      // Extract and save evidence from resume if available
-      if (parsedResume?.experience?.length) {
-        const evidenceToSave = parsedResume.experience.map((exp, i) => ({
-          user_id: user.id,
-          source_type: "resume",
-          source_title: `${exp.title} at ${exp.company}`,
-          role_name: exp.title || null,
-          company_name: exp.company || null,
-          date_range: exp.dates || null,
-          responsibilities: exp.bullets || [],
-          outcomes: [],
-          proof_snippet: exp.description || exp.bullets?.join(" ") || null,
-          is_active: true,
-          priority_rank: i,
-          confidence_level: "high",
-          is_user_approved: false,
-        }))
-
-        await supabase.from("evidence_library").insert(evidenceToSave)
-      }
+      // Evidence is already created in handleResumeUpload via /api/evidence/from-resume
+      // No need to create it again here
 
       setStep("complete")
     } catch (err) {
