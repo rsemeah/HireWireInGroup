@@ -29,6 +29,7 @@ export interface JobParser {
 import { greenhouseParser } from "./greenhouse"
 import { leverParser } from "./lever"
 import { linkedinParser } from "./linkedin"
+import { workdayParser } from "./workday"
 import { genericParser } from "./generic"
 
 // Parser registry
@@ -36,6 +37,7 @@ const parsers: Map<JobSource, JobParser> = new Map([
   ["GREENHOUSE", greenhouseParser],
   ["LEVER", leverParser],
   ["LINKEDIN", linkedinParser],
+  ["WORKDAY", workdayParser],
 ])
 
 /**

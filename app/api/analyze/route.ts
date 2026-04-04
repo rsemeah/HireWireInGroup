@@ -300,11 +300,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (pageContent.length < 100) {
-      return NextResponse.json(
-        { success: false, error: "Job page content too short - may be blocked or invalid" },
-        { status: 400 }
-      )
+    // Handle limited content gracefully - allow analysis to proceed with warning
+    const isLimitedContent = pageContent.length < 100
+    if (isLimitedContent) {
+      // For JS-heavy sites (Workday, etc.), add context for the LLM
+      pageContent = `[LIMITED CONTENT WARNING]
+This job page returned minimal content, likely due to JavaScript rendering requirements.
+URL: ${job_url}
+Source: ${source}
+
+Available content:
+${pageContent}
+
+Instructions: Extract whatever information is available. For any fields that cannot be determined from this limited content, use null or empty arrays as appropriate. The user will be prompted to add missing details manually.`
     }
 
     // Analyze with Groq
@@ -601,6 +609,10 @@ Extract the job details following the schema. Be accurate with the role_family c
       success: true,
       job_id: job.id,
       duplicate: false,
+      limited_content: isLimitedContent,
+      limited_content_message: isLimitedContent 
+        ? "This job page returned limited content. Some details may need to be added manually." 
+        : null,
       analysis: {
         title: validatedAnalysis.title,
         company: validatedAnalysis.company,
