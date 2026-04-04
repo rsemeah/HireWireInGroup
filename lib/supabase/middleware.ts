@@ -11,7 +11,7 @@ const PUBLIC_ROUTES = [
   '/landing',
   '/terms',
   '/privacy',
-  '/api/health',
+  '/api/', // All API routes handle their own auth
 ]
 
 // Routes that should redirect to dashboard if already authenticated
