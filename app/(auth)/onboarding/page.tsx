@@ -251,7 +251,7 @@ export default function OnboardingPage() {
           <CardContent className="space-y-6">
             <div className="grid gap-4">
               <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
-                <Target className="h-5 w-5 mt-0.5 text-hirewire-red" />
+                <Target className="h-5 w-5 mt-0.5 text-primary" />
                 <div>
                   <div className="font-medium">Know Before You Apply</div>
                   <div className="text-sm text-muted-foreground">
@@ -260,7 +260,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
-                <FileText className="h-5 w-5 mt-0.5 text-hirewire-red" />
+                <FileText className="h-5 w-5 mt-0.5 text-primary" />
                 <div>
                   <div className="font-medium">Evidence-Backed Materials</div>
                   <div className="text-sm text-muted-foreground">
@@ -269,7 +269,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
-                <Sparkles className="h-5 w-5 mt-0.5 text-hirewire-red" />
+                <Sparkles className="h-5 w-5 mt-0.5 text-primary" />
                 <div>
                   <div className="font-medium">AI Career Coach</div>
                   <div className="text-sm text-muted-foreground">
@@ -279,7 +279,7 @@ export default function OnboardingPage() {
               </div>
             </div>
             <Button 
-              className="w-full h-11 bg-hirewire-red hover:bg-hirewire-red/90" 
+              className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90" 
               onClick={() => setStep("resume")}
             >
               Get Started
@@ -308,8 +308,8 @@ export default function OnboardingPage() {
             <div className="p-6 rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/30">
               <div className="text-center space-y-4">
                 <div className="flex justify-center">
-                  <div className="h-16 w-16 rounded-full bg-hirewire-red/10 flex items-center justify-center">
-                    <Upload className="h-8 w-8 text-hirewire-red" />
+                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Upload className="h-8 w-8 text-primary" />
                   </div>
                 </div>
                 <div>
@@ -328,7 +328,7 @@ export default function OnboardingPage() {
                 <Button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isParsingResume}
-                  className="bg-hirewire-red hover:bg-hirewire-red/90"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {isParsingResume ? (
                     <>
@@ -489,7 +489,7 @@ export default function OnboardingPage() {
                 Back
               </Button>
               <Button
-                className="flex-1 bg-hirewire-red hover:bg-hirewire-red/90"
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleCreateProfile}
                 disabled={isLoading}
               >
@@ -552,7 +552,7 @@ export default function OnboardingPage() {
           </div>
 
           <Button
-            className="w-full h-12 bg-hirewire-red hover:bg-hirewire-red/90"
+            className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={handleGoToDashboard}
           >
             Go to Dashboard

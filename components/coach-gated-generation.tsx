@@ -191,7 +191,7 @@ export function CoachGatedGeneration({
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-hirewire-red" />
+                  <Sparkles className="h-5 w-5 text-primary" />
                   Address Gap with Coach
                 </DialogTitle>
                 <DialogDescription className="mt-1">
@@ -231,7 +231,7 @@ export function CoachGatedGeneration({
             <Button variant="outline" onClick={() => setShowCoach(false)}>
               Back to Gaps
             </Button>
-            <Button onClick={handleCoachComplete} className="bg-hirewire-red hover:bg-hirewire-red/90">
+            <Button onClick={handleCoachComplete} className="bg-primary text-primary-foreground hover:bg-primary/90">
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Mark Addressed
             </Button>
@@ -246,7 +246,7 @@ export function CoachGatedGeneration({
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-hirewire-red" />
+            <Target className="h-5 w-5 text-primary" />
             Strengthen Your Application
           </DialogTitle>
           <DialogDescription>
@@ -322,7 +322,7 @@ export function CoachGatedGeneration({
                           <Button
                             size="sm"
                             onClick={() => handleOpenCoach(gap.id)}
-                            className="text-xs bg-hirewire-red hover:bg-hirewire-red/90"
+                            className="text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                           >
                             <MessageSquare className="mr-1 h-3 w-3" />
                             Coach
@@ -359,7 +359,7 @@ export function CoachGatedGeneration({
             className={cn(
               "gap-2",
               isUnlocked 
-                ? "bg-hirewire-red hover:bg-hirewire-red/90" 
+                ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                 : "opacity-50 cursor-not-allowed"
             )}
           >

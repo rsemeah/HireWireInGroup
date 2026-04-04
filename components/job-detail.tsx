@@ -825,7 +825,7 @@ export function JobDetail({ job }: JobDetailProps) {
               <Button 
                 onClick={() => runGapDetection()} 
                 disabled={isGenerating || isLoadingGaps}
-                className="bg-primary hover:bg-primary/90"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {isGenerating ? (
                   <>
@@ -852,7 +852,7 @@ export function JobDetail({ job }: JobDetailProps) {
                 </Button>
               </Link>
             ) : (
-<Button onClick={handleApplyNow} className="bg-primary hover:bg-primary/90">
+<Button onClick={handleApplyNow} className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Send className="mr-2 h-4 w-4" />
                 Apply Now
               </Button>
