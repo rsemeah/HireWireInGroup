@@ -11,7 +11,11 @@ const PUBLIC_ROUTES = [
   '/landing',
   '/terms',
   '/privacy',
-  '/api/', // All API routes handle their own auth
+]
+
+// Route prefixes that don't require authentication
+const PUBLIC_PREFIXES = [
+  '/api', // All API routes handle their own auth
 ]
 
 // Routes that should redirect to dashboard if already authenticated
@@ -58,7 +62,7 @@ export async function updateSession(request: NextRequest) {
   // Check if current route is public
   const isPublicRoute = PUBLIC_ROUTES.some(route => 
     pathname === route || pathname.startsWith(route + '/')
-  )
+  ) || PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix))
 
   // Check if current route is an auth route (login/signup)
   const isAuthRoute = AUTH_ROUTES.some(route => 
