@@ -28,12 +28,14 @@ export interface JobParser {
 // Import source-specific parsers
 import { greenhouseParser } from "./greenhouse"
 import { leverParser } from "./lever"
+import { linkedinParser } from "./linkedin"
 import { genericParser } from "./generic"
 
 // Parser registry
 const parsers: Map<JobSource, JobParser> = new Map([
   ["GREENHOUSE", greenhouseParser],
   ["LEVER", leverParser],
+  ["LINKEDIN", linkedinParser],
 ])
 
 /**
