@@ -116,11 +116,6 @@ export default function OnboardingPage() {
   }
 
   // Save profile and complete onboarding
-  // Resume upload state
-  const [resumeText, setResumeText] = useState("")
-  const [resumeFile, setResumeFile] = useState<File | null>(null)
-  const [resumeResult, setResumeResult] = useState<{ inserted: number; skipped: number } | null>(null)
-
   const handleCreateProfile = async () => {
     if (!fullName.trim()) {
       setError("Please enter your name")
@@ -164,48 +159,9 @@ export default function OnboardingPage() {
         })
 
       if (upsertError) throw upsertError
-      setStep("resume")
-
-      // If we have extracted evidence from resume, save it
-      if (parsedResume?.extractedEvidence?.length) {
-        const evidenceToSave = parsedResume.extractedEvidence.map((e, i) => ({
-          user_id: user.id,
-          title: e.title,
-          description: e.description,
-          category: e.category,
-          metrics: e.metrics,
-          tags: e.tags,
-          is_active: true,
-          priority_rank: i,
-        }))
-
-        const { error: evidenceError } = await supabase
-          .from("evidence_library")
-          .insert(evidenceToSave)
-
-        if (!evidenceError) {
-          setSavedEvidenceCount(evidenceToSave.length)
-        }
-      }
-
-      let profileError
-      if (existingProfile) {
-        const { error } = await supabase
-          .from("user_profile")
-          .update(profileData)
-          .eq("user_id", user.id)
-        profileError = error
-      } else {
-        const { error } = await supabase
-          .from("user_profile")
-          .insert(profileData)
-        profileError = error
-      }
-      
-      if (profileError) throw profileError
 
       // Evidence is already created in handleResumeUpload via /api/evidence/from-resume
-      // No need to create it again here
+      // No need to create it again here - just proceed to complete step
 
       setStep("complete")
     } catch (err) {
@@ -227,59 +183,6 @@ export default function OnboardingPage() {
         .from("user_profile")
         .update({ onboarding_complete: true })
         .eq("user_id", user.id)
-  const handleResumeUpload = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      let body: BodyInit
-      let headers: Record<string, string> = {}
-
-      if (resumeFile) {
-        const form = new FormData()
-        form.append("file", resumeFile)
-        body = form
-        // Let browser set multipart content-type with boundary
-      } else if (resumeText.trim()) {
-        body = JSON.stringify({ text: resumeText.trim() })
-        headers["Content-Type"] = "application/json"
-      } else {
-        setError("Paste your resume text or select a .txt file")
-        setIsLoading(false)
-        return
-      }
-
-      const res = await fetch("/api/resume/upload", { method: "POST", headers, body })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || "Upload failed")
-        return
-      }
-
-      setResumeResult({ inserted: data.inserted ?? 0, skipped: data.skipped ?? 0 })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSelectPath = (path: "job" | "evidence" | "explore") => {
-  const handleSelectPath = (path: "job" | "evidence" | "explore" | "coach") => {
-    switch (path) {
-      case "job":
-        router.push("/jobs/new")
-        break
-      case "evidence":
-        router.push("/profile")
-        break
-      case "coach":
-        router.push("/coach")
-        break
-      case "explore":
-        router.push("/")
-        break
     }
     
     router.push("/")
