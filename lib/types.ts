@@ -1,12 +1,19 @@
 /**
  * HireWire TruthSerum Types
- * Evidence-based career operating system for Ro
+ * Evidence-based career operating system
  * 
  * Architecture:
  * - Frontend: URL intake, analysis display, document review
  * - API Routes: Direct job analysis and document generation
  * - Supabase: Persistent state (jobs, profiles, evidence, documents)
  */
+
+import {
+  type CanonicalGenerationStatus,
+  type CanonicalJobStatus,
+  JOB_STATUS_CONFIG,
+  JOB_STATUS_GROUPS,
+} from "@/lib/job-lifecycle"
 
 // ============================================================================
 // RESUME TEMPLATE TYPES
@@ -40,15 +47,60 @@ export interface ResumeTemplateConfig {
 }
 
 // ============================================================================
-// GENERATION STATUS
+// JOB STATUS (Pipeline Status - UPPERCASE for consistency)
 // ============================================================================
 
-export type GenerationStatus = 
-  | "pending"      // Ready to generate (has analysis, no materials)
-  | "generating"   // Currently generating (in progress)
-  | "ready"        // Materials available for download
-  | "failed"       // Error occurred during generation
-  | "needs_review" // Generated but has quality issues
+export type JobStatus = 
+  | "NEW"              // Just added, not yet analyzed
+  | "ANALYZING"        // Currently being analyzed
+  | "SCORED"           // Analyzed and scored, ready for document generation
+  | "REVIEWING"        // User is reviewing evidence mapping
+  | "GENERATING"       // Documents being generated
+  | "READY"            // Documents ready, can apply
+  | "APPLIED"          // Application submitted
+  | "INTERVIEWING"     // Interview process ongoing
+  | "OFFERED"          // Received job offer
+  | "REJECTED"         // Application rejected
+  | "WITHDRAWN"        // User withdrew application
+  | "ERROR"            // Processing error
+
+// Helper to normalize status values from database
+export function normalizeJobStatus(status: string | null): JobStatus {
+  if (!status) return "NEW"
+  const upper = status.toUpperCase().replace(/_/g, "").replace(/-/g, "")
+  
+  // Map various formats to canonical values
+  const statusMap: Record<string, JobStatus> = {
+    "NEW": "NEW",
+    "ANALYZING": "ANALYZING",
+    "SCORED": "SCORED",
+    "REVIEWING": "REVIEWING",
+    "GENERATING": "GENERATING",
+    "READY": "READY",
+    "READYTOAPPLY": "READY",
+    "READY_TO_APPLY": "READY",
+    "MANUALREVIEWREQUIRED": "REVIEWING",
+    "MANUAL_REVIEW_REQUIRED": "REVIEWING",
+    "NEEDSREVIEW": "REVIEWING",
+    "NEEDS_REVIEW": "REVIEWING",
+    "APPLIED": "APPLIED",
+    "INTERVIEWING": "INTERVIEWING",
+    "INTERVIEW": "INTERVIEWING",
+    "OFFERED": "OFFERED",
+    "REJECTED": "REJECTED",
+    "WITHDRAWN": "WITHDRAWN",
+    "ERROR": "ERROR",
+    "FAILED": "ERROR",
+  }
+  
+  return statusMap[upper] || "NEW"
+}
+
+// ============================================================================
+// GENERATION STATUS (Document Generation - lowercase for consistency with DB)
+// ============================================================================
+
+export type GenerationStatus = CanonicalGenerationStatus
 
 // ============================================================================
 // EXTENDED PROFILE FOR MULTI-TEMPLATE SUPPORT
@@ -170,20 +222,7 @@ export const STRETCH_TITLES = [
 // JOB LIFECYCLE STATES
 // ============================================================================
 
-export type JobStatus =
-  | "NEW"                   // Just analyzed, ready for review
-  | "REVIEWING"             // User is reviewing fit
-  | "GENERATING"            // Materials being generated
-  | "SCORED"                // Scored with materials generated
-  | "READY"                 // Ready to apply (materials complete)
-  | "APPLIED"               // Application submitted
-  | "INTERVIEWING"          // In interview process
-  | "OFFERED"               // Received offer
-  | "REJECTED"              // Rejected by company
-  | "DECLINED"              // User declined opportunity
-  | "ARCHIVED"              // User archived/not interested
-  | "NEEDS_REVIEW"          // Data quality issues
-  | "ERROR"                 // Processing failed
+export type JobStatus = CanonicalJobStatus
 
 export type JobFit = "HIGH" | "MEDIUM" | "LOW" | null
 
@@ -410,27 +449,7 @@ export const BANNED_PHRASES = [
 // UI DISPLAY CONFIGURATION
 // ============================================================================
 
-export const STATUS_CONFIG: Record<JobStatus, { 
-  label: string
-  color: string
-  description: string
-  isProcessing?: boolean
-  isTerminal?: boolean
-}> = {
-  NEW: { label: "New", color: "blue", description: "Just added" },
-  REVIEWING: { label: "Reviewing", color: "yellow", description: "Under review" },
-  GENERATING: { label: "Generating", color: "purple", description: "Creating materials", isProcessing: true },
-  SCORED: { label: "Scored", color: "cyan", description: "Fit assessed" },
-  READY: { label: "Ready", color: "green", description: "Ready to apply" },
-  APPLIED: { label: "Applied", color: "emerald", description: "Application sent" },
-  INTERVIEWING: { label: "Interview", color: "cyan", description: "In progress" },
-  OFFERED: { label: "Offer", color: "green", description: "Congratulations!" },
-  REJECTED: { label: "Rejected", color: "red", description: "Not selected", isTerminal: true },
-  DECLINED: { label: "Declined", color: "gray", description: "You passed", isTerminal: true },
-  ARCHIVED: { label: "Archived", color: "gray", description: "No longer active", isTerminal: true },
-  NEEDS_REVIEW: { label: "Review", color: "amber", description: "Data needs attention" },
-  ERROR: { label: "Error", color: "red", description: "Processing failed" },
-}
+export const STATUS_CONFIG = JOB_STATUS_CONFIG
 
 export const FIT_CONFIG: Record<NonNullable<JobFit>, { label: string; color: string; description: string }> = {
   HIGH: { label: "High Fit", color: "green", description: "Strong alignment with skills and experience" },
@@ -440,10 +459,10 @@ export const FIT_CONFIG: Record<NonNullable<JobFit>, { label: string; color: str
 
 // Status groupings for views
 export const STATUS_GROUPS = {
-  active: ["NEW", "REVIEWING", "GENERATING", "SCORED", "READY"],
-  applied: ["APPLIED", "INTERVIEWING", "OFFERED"],
-  closed: ["REJECTED", "DECLINED", "ARCHIVED"],
-  attention: ["NEEDS_REVIEW", "ERROR"],
+  active: JOB_STATUS_GROUPS.active,
+  applied: JOB_STATUS_GROUPS.applied,
+  closed: JOB_STATUS_GROUPS.closed,
+  attention: JOB_STATUS_GROUPS.attention,
 } as const
 
 // Industry categories for filtering

@@ -9,12 +9,23 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+  }
+  
   const { data, error } = await supabase
     .from("user_profile")
     .select("*")
     .eq("user_id", user.id)
     .single()
 
+    .maybeSingle()
+  
   if (error && error.code !== "PGRST116") {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -28,6 +39,13 @@ export async function POST(request: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
   const body = await request.json()
@@ -38,6 +56,8 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .single()
 
+    .maybeSingle()
+  
   if (existing) {
     const { data, error } = await supabase
       .from("user_profile")
@@ -45,6 +65,7 @@ export async function POST(request: Request) {
         full_name: body.full_name,
         title: body.title ?? null,
         email: body.email,
+        email: body.email || user.email,
         phone: body.phone,
         location: body.location,
         summary: body.summary,
@@ -57,6 +78,7 @@ export async function POST(request: Request) {
         website_url: body.website_url ?? null,
         updated_at: new Date().toISOString(),
       })
+      .eq("id", existing.id)
       .eq("user_id", user.id)
       .select()
       .single()
@@ -74,6 +96,7 @@ export async function POST(request: Request) {
         full_name: body.full_name,
         title: body.title ?? null,
         email: body.email,
+        email: body.email || user.email,
         phone: body.phone,
         location: body.location,
         summary: body.summary,

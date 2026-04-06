@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createGroq } from "@ai-sdk/groq"
-import { generateObject } from "ai"
+import { generateText, generateObject } from "ai"
 import { z } from "zod"
-import { createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
+import { groq, isGroqConfigured, MODELS } from "@/lib/adapters/groq"
 import type { 
   InterviewPrep,
   InterviewSnapshot,
@@ -18,10 +18,6 @@ import type {
   ObjectionHandlingItem,
   QuickSheet,
 } from "@/lib/interview-prep-types"
-
-const groq = createGroq({
-  apiKey: process.env.GROQ_API_KEY,
-})
 
 // ============================================================================
 // ZOD SCHEMAS FOR STRUCTURED GENERATION
@@ -146,35 +142,67 @@ const QuickSheetSchema = z.object({
 // HELPER FUNCTIONS
 // ============================================================================
 
-async function loadJobWithAnalysis(supabase: ReturnType<typeof createAdminClient>, jobId: string) {
+async function loadJobWithAnalysis(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string, userId: string) {
   const { data: job, error } = await supabase
     .from("jobs")
     .select(`
       *,
-      job_analyses (*)
+      job_analyses (*),
+      job_scores (
+        overall_score,
+        confidence_score
+      )
     `)
     .eq("id", jobId)
+    .eq("user_id", userId)
     .single()
 
   if (error || !job) return null
-  return job
+  
+  // Transform to UI-expected format
+  const analyses = (job.job_analyses as Array<Record<string, unknown>>) || []
+  const scores = (job.job_scores as Array<{ overall_score?: number }>) || []
+  const analysis = analyses[0] || {}
+  const score = scores[0]?.overall_score ?? null
+  
+  // Derive fit from score
+  let fit: string | null = null
+  if (score !== null) {
+    if (score >= 75) fit = "HIGH"
+    else if (score >= 50) fit = "MEDIUM"
+    else fit = "LOW"
+  }
+  
+  return {
+    ...job,
+    // Map normalized columns to legacy names
+    title: job.role_title || analysis.title || job.title,
+    company: job.company_name || analysis.company || job.company,
+    score,
+    fit,
+    score_gaps: analysis.known_gaps || [],
+    score_strengths: analysis.matched_skills || [],
+    location: analysis.location || job.location,
+    salary_range: analysis.salary_text || job.salary_range,
+  }
 }
 
-async function loadUserProfile(supabase: ReturnType<typeof createAdminClient>) {
+async function loadUserProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile, error } = await supabase
     .from("user_profile")
     .select("*")
-    .limit(1)
+    .eq("user_id", userId)
     .maybeSingle()
 
   if (error || !profile) return null
   return profile
 }
 
-async function loadEvidenceLibrary(supabase: ReturnType<typeof createAdminClient>) {
+async function loadEvidenceLibrary(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: evidence, error } = await supabase
     .from("evidence_library")
     .select("*")
+    .eq("user_id", userId)
     .eq("is_active", true)
     .order("priority_rank", { ascending: false })
 
@@ -182,11 +210,12 @@ async function loadEvidenceLibrary(supabase: ReturnType<typeof createAdminClient
   return evidence || []
 }
 
-async function loadExistingInterviewPrep(supabase: ReturnType<typeof createAdminClient>, jobId: string) {
+async function loadExistingInterviewPrep(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string, userId: string) {
   const { data, error } = await supabase
     .from("interview_prep")
     .select("*")
     .eq("job_id", jobId)
+    .eq("user_id", userId)
     .maybeSingle()
 
   if (error) return null
@@ -276,14 +305,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createAdminClient()
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      )
+    }
 
     // Load all required data
     const [profile, evidence, job, existingPrep] = await Promise.all([
-      loadUserProfile(supabase),
-      loadEvidenceLibrary(supabase),
-      loadJobWithAnalysis(supabase, job_id),
-      loadExistingInterviewPrep(supabase, job_id),
+      loadUserProfile(supabase, user.id),
+      loadEvidenceLibrary(supabase, user.id),
+      loadJobWithAnalysis(supabase, job_id, user.id),
+      loadExistingInterviewPrep(supabase, job_id, user.id),
     ])
 
     if (!profile) {
@@ -325,11 +365,11 @@ TRUTH RULES:
       sectionName: string
     ): Promise<T> => {
       const { object } = await generateObject({
-        model: groq("llama-3.3-70b-versatile"),
+        model: groq(MODELS.VERSATILE),
         schema,
         prompt: `${basePrompt}\n\n${sectionPrompt}`,
       })
-      return object
+      return object as T
     }
 
     // If regenerating a specific section, only regenerate that one
@@ -522,10 +562,12 @@ This should fit on one page and be scannable in under 1 minute.
           updated_at: new Date().toISOString(),
         })
         .eq("id", existingPrep.id)
+        .eq("user_id", user.id)
     } else {
       await supabase
         .from("interview_prep")
         .insert({
+          user_id: user.id,
           ...interviewPrep,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -537,6 +579,7 @@ This should fit on one page and be scannable in under 1 minute.
       .from("interview_prep")
       .select("*")
       .eq("job_id", job_id)
+      .eq("user_id", user.id)
       .single()
 
     return NextResponse.json({

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import {
   parseCoverLetterToStructured,
   ParagraphProvenanceEntry,
@@ -25,13 +25,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createAdminClient()
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Not authenticated" },
+        { status: 401 }
+      )
+    }
 
     // Load job with generated cover letter
     const { data: job, error: jobError } = await supabase
       .from("jobs")
       .select("*")
       .eq("id", job_id)
+      .eq("user_id", user.id)
       .single()
 
     if (jobError || !job) {
@@ -52,10 +65,12 @@ export async function POST(request: NextRequest) {
     const { data: profile } = await supabase
       .from("user_profile")
       .select("*")
-      .limit(1)
+      .eq("user_id", user.id)
       .maybeSingle()
 
     const senderName = profile?.full_name || "Candidate"
+    const senderPhone = profile?.phone || undefined
+    const senderEmail = profile?.email || undefined
 
     // Build provenance from stored data or empty
     const provenance: ParagraphProvenanceEntry[] = job.cover_letter_provenance || []
@@ -71,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     // Export based on format
     if (format === "docx") {
-      const result = await exportCoverLetterToDocx(structuredCoverLetter, senderName)
+      const result = await exportCoverLetterToDocx(structuredCoverLetter, senderName, senderPhone, senderEmail)
       
       if (!result.success) {
         return NextResponse.json(
@@ -97,7 +112,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (format === "html") {
-      const html = exportCoverLetterToHtml(structuredCoverLetter, senderName)
+      const html = exportCoverLetterToHtml(structuredCoverLetter, senderName, "ats", senderPhone, senderEmail)
       
       return new NextResponse(html, {
         headers: {

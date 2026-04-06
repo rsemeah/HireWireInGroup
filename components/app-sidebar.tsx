@@ -1,105 +1,127 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { HireWireLogo } from "@/components/hirewire-logo"
+import { Badge } from "@/components/ui/badge"
 import {
-  LayoutDashboard,
   Briefcase,
   FileText,
-  BookOpen,
   User,
-  Database,
   Settings,
+  Grid2X2,
+  CheckSquare,
+  Send,
+  SlidersHorizontal,
+  History,
+  BarChart3,
+  PlusCircle,
+  Sparkles,
+  Library,
+  CreditCard,
+  Zap,
 } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
 } from "@/components/ui/sidebar"
-import { BarbedWireLine } from "@/components/barbed-wire"
+import { DiagonalStripes } from "@/components/off-white-stripes"
 import { cn } from "@/lib/utils"
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Jobs", href: "/jobs", icon: Briefcase },
-  { name: "Documents", href: "/documents", icon: FileText },
-  { name: "Prep Kit", href: "/ready-queue", icon: BookOpen },
+// Pipeline navigation - main workflow
+// NOTE: Removed placeholder pages that aren't wired (Companies, Templates)
+const pipelineNav = [
+  { name: "Home", href: "/", icon: Grid2X2 },
+  { name: "Coach", href: "/coach", icon: Sparkles, premium: true },
+  { name: "All Jobs", href: "/jobs", icon: Briefcase },
+  { name: "Ready to Apply", href: "/ready-queue", icon: CheckSquare },
+  { name: "Applied", href: "/applications", icon: Send },
+  { name: "Materials", href: "/documents", icon: FileText },
+  { name: "Evidence", href: "/evidence", icon: Library },
+  { name: "Analytics", href: "/analytics", icon: BarChart3, premium: true },
+  { name: "Activity Log", href: "/logs", icon: History },
+  { name: "Add Job", href: "/jobs/new", icon: PlusCircle },
+]
+
+// Bottom navigation - settings/profile
+const bottomNav = [
   { name: "Profile", href: "/profile", icon: User },
-  { name: "Data Sources", href: "/logs", icon: Database },
+  { name: "Billing", href: "/billing", icon: CreditCard },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
 export function AppSidebar() {
   const pathname = usePathname()
 
+  const renderNavItem = (item: { name: string; href: string; icon: React.ComponentType<{ className?: string }>; premium?: boolean }) => {
+    const isActive = pathname === item.href || 
+      (item.href !== "/" && pathname.startsWith(item.href))
+    return (
+      <SidebarMenuItem key={item.name}>
+        <SidebarMenuButton 
+          asChild 
+          isActive={isActive}
+          className={cn(
+            "h-10 px-3 rounded-lg transition-all relative",
+            isActive && "bg-accent text-foreground font-medium"
+          )}
+        >
+          <Link href={item.href}>
+            <item.icon className={cn(
+              "h-4 w-4",
+              isActive ? "text-foreground" : "text-muted-foreground"
+            )} />
+            <span className="text-sm flex-1">{item.name}</span>
+            {item.premium && (
+              <Badge variant="outline" className="h-4 px-1 text-[9px] font-medium text-primary border-primary/30">
+                PRO
+              </Badge>
+            )}
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    )
+  }
+
   return (
-    <Sidebar className="border-r border-sidebar-border relative">
-      {/* Barbed wire accent on right edge */}
-      <BarbedWireLine variant="vertical" intensity="light" className="z-10" />
-      
-      <SidebarHeader className="px-4 py-5">
-        <Link href="/" className="flex items-center justify-center">
-          <Image
-            src="/images/hirewire-logo.png"
-            alt="HireWire"
-            width={130}
-            height={46}
-            className="object-contain"
-            style={{ width: 'auto', height: 'auto' }}
-            priority
-            loading="eager"
-          />
+    <Sidebar className="border-r border-sidebar-border">
+      <SidebarHeader className="px-4 py-5 relative overflow-hidden">
+        {/* Off-White diagonal stripes in logo box - top-left and bottom-right */}
+        <DiagonalStripes position="top-left" size="sm" variant="black" opacity={0.08} />
+        <DiagonalStripes position="bottom-right" size="sm" variant="black" opacity={0.08} />
+        
+        <Link href="/" className="flex items-center justify-center relative z-10">
+          <HireWireLogo variant="red" size="md" />
         </Link>
       </SidebarHeader>
       
       <SidebarContent className="px-3">
+        {/* Pipeline Section */}
         <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase px-3">
+            Pipeline
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigation.map((item) => {
-                const isActive = pathname === item.href || 
-                  (item.href !== "/" && pathname.startsWith(item.href))
-                return (
-                  <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={isActive}
-                      className={cn(
-                        "h-10 px-3 rounded-lg transition-all relative",
-                        isActive && "bg-primary/10 text-primary font-medium"
-                      )}
-                    >
-                      <Link href={item.href}>
-                        {/* Active indicator bar */}
-                        {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-primary rounded-r" />
-                        )}
-                        <item.icon className={cn(
-                          "h-4 w-4",
-                          isActive ? "text-primary" : "text-muted-foreground"
-                        )} />
-                        <span className="text-sm">{item.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              {pipelineNav.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       
-      <SidebarFooter className="px-4 pb-4">
-        <div className="text-[10px] text-muted-foreground text-center">
-          HireWire v1.0
-        </div>
+      <SidebarFooter className="px-3 pb-4">
+        {/* Bottom nav items */}
+        <SidebarMenu className="border-t border-sidebar-border pt-3">
+          {bottomNav.map(renderNavItem)}
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   )

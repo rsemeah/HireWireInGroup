@@ -55,10 +55,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       .from("user_profile")
       .select("*")
       .eq("user_id", userId)
-      .single()
+      .maybeSingle()
     
     if (data) {
       setProfile(data as UserProfile)
+    } else {
+      setProfile(null)
     }
   }, [])
 
@@ -143,12 +145,25 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile])
 
   const signOut = async () => {
+    console.log("[v0] signOut called")
     const supabase = createClient()
-    await supabase.auth.signOut()
+    
+    // Clear local state first
     setUser(null)
     setProfile(null)
-    // Force a full page reload to clear all state
-    window.location.href = "/login"
+    
+    try {
+      // Sign out from Supabase with scope: 'local' to only clear this browser
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
+      console.log("[v0] signOut result:", error ? error.message : "success")
+    } catch (err) {
+      console.error("[v0] signOut error:", err)
+    }
+    
+    // Always redirect regardless of success/failure
+    // Use replace to prevent back button returning to authenticated page
+    console.log("[v0] Redirecting to login")
+    window.location.replace("/login")
   }
 
   return (

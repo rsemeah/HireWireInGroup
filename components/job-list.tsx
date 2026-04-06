@@ -5,6 +5,7 @@ import { useState, useMemo } from "react"
 import Link from "next/link"
 import type { Job, JobStatus, JobFit, RoleFamily, GenerationStatus } from "@/lib/types"
 import { STATUS_CONFIG, FIT_CONFIG, STATUS_GROUPS, ROLE_FAMILIES, INDUSTRIES } from "@/lib/types"
+import { normalizeJobStatus } from "@/lib/job-lifecycle"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -37,14 +38,16 @@ import {
   AlertTriangle,
   XCircle,
   Clock,
+  Trash2,
 } from "lucide-react"
+import { DeleteJobDialog } from "@/components/delete-job-dialog"
 
 // Status groupings for the view
 const STATUS_GROUP_CONFIG = {
-  active: { label: "Active", statuses: ["NEW", "REVIEWING", "GENERATING", "SCORED", "READY"], color: "blue" },
-  applied: { label: "Applied", statuses: ["APPLIED", "INTERVIEWING", "OFFERED"], color: "green" },
-  attention: { label: "Needs Attention", statuses: ["NEEDS_REVIEW", "ERROR"], color: "amber" },
-  closed: { label: "Closed", statuses: ["REJECTED", "DECLINED", "ARCHIVED"], color: "gray" },
+  active: { label: "Active", statuses: ["draft", "queued", "analyzing", "analyzed", "generating", "ready"], color: "blue" },
+  applied: { label: "Applied", statuses: ["applied", "interviewing", "offered"], color: "green" },
+  attention: { label: "Needs Attention", statuses: ["needs_review", "error"], color: "amber" },
+  closed: { label: "Closed", statuses: ["rejected", "archived"], color: "gray" },
 } as const
 
 type StatusGroup = keyof typeof STATUS_GROUP_CONFIG
@@ -177,8 +180,8 @@ function MaterialsIndicator({ job }: { job: Job }) {
 function JobRow({ job, viewMode }: { job: Job; viewMode: "list" | "card" }) {
   if (viewMode === "card") {
     return (
-      <Link href={`/jobs/${job.id}`}>
-        <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+      <Card className="hover:border-primary/50 transition-colors group relative">
+        <Link href={`/jobs/${job.id}`}>
           <CardContent className="p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -201,39 +204,59 @@ function JobRow({ job, viewMode }: { job: Job; viewMode: "list" | "card" }) {
               <span suppressHydrationWarning>{formatDate(job.created_at)}</span>
             </div>
           </CardContent>
-        </Card>
-      </Link>
+        </Link>
+        {/* Delete button - appears on hover */}
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <DeleteJobDialog
+            jobId={job.id}
+            jobTitle={job.title}
+            company={job.company}
+            variant="icon"
+          />
+        </div>
+      </Card>
     )
   }
 
   return (
-    <Link 
-      href={`/jobs/${job.id}`}
-      className="flex items-center gap-4 py-3 px-4 hover:bg-muted/50 rounded-lg transition-colors"
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium truncate">{job.title}</span>
-          <FitBadge fit={job.fit} score={job.score} />
+    <div className="flex items-center gap-4 py-3 px-4 hover:bg-muted/50 rounded-lg transition-colors group">
+      <Link 
+        href={`/jobs/${job.id}`}
+        className="flex items-center gap-4 flex-1 min-w-0"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium truncate">{job.title}</span>
+            <FitBadge fit={job.fit} score={job.score} />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>{job.company}</span>
+            {job.location && (
+              <>
+                <span>-</span>
+                <span>{job.location}</span>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>{job.company}</span>
-          {job.location && (
-            <>
-              <span>-</span>
-              <span>{job.location}</span>
-            </>
-          )}
+        <div className="flex items-center gap-4">
+          <MaterialsIndicator job={job} />
+          <StatusBadge status={job.status} />
+          <span className="text-xs text-muted-foreground w-16 text-right" suppressHydrationWarning>
+            {formatDate(job.created_at)}
+          </span>
         </div>
+      </Link>
+      {/* Delete button - appears on hover */}
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <DeleteJobDialog
+          jobId={job.id}
+          jobTitle={job.title}
+          company={job.company}
+          variant="icon"
+        />
       </div>
-      <div className="flex items-center gap-4">
-        <MaterialsIndicator job={job} />
-        <StatusBadge status={job.status} />
-        <span className="text-xs text-muted-foreground w-16 text-right" suppressHydrationWarning>
-          {formatDate(job.created_at)}
-        </span>
-      </div>
-    </Link>
+    </div>
   )
 }
 
@@ -288,6 +311,8 @@ export function JobsTable({ jobs }: JobsTableProps) {
   const [fitFilter, setFitFilter] = useState<JobFit | "ALL">("ALL")
   const [roleFamilyFilter, setRoleFamilyFilter] = useState<string>("ALL")
   const [industryFilter, setIndustryFilter] = useState<string>("ALL")
+  const [companyFilter, setCompanyFilter] = useState<string>("ALL")
+  const [materialsFilter, setMaterialsFilter] = useState<"ALL" | "ready" | "partial" | "none">("ALL")
   const [searchQuery, setSearchQuery] = useState("")
   const [hideMalformed, setHideMalformed] = useState(true)
   const [viewMode, setViewMode] = useState<"list" | "card">("list")
@@ -304,6 +329,11 @@ export function JobsTable({ jobs }: JobsTableProps) {
     return Array.from(industries) as string[]
   }, [jobs])
 
+  const uniqueCompanies = useMemo(() => {
+    const companies = new Set(jobs.map(job => job.company).filter(Boolean))
+    return Array.from(companies).sort() as string[]
+  }, [jobs])
+
   // Filter and sort jobs
   const filteredJobs = useMemo(() => {
     let result = jobs.filter((job) => {
@@ -313,6 +343,19 @@ export function JobsTable({ jobs }: JobsTableProps) {
       if (fitFilter !== "ALL" && job.fit !== fitFilter) return false
       if (roleFamilyFilter !== "ALL" && job.role_family !== roleFamilyFilter) return false
       if (industryFilter !== "ALL" && job.industry_guess !== industryFilter) return false
+      if (companyFilter !== "ALL" && job.company !== companyFilter) return false
+      
+      // Materials filter
+      if (materialsFilter !== "ALL") {
+        const hasResume = !!job.generated_resume
+        const hasCoverLetter = !!job.generated_cover_letter
+        const hasBoth = hasResume && hasCoverLetter
+        const hasAny = hasResume || hasCoverLetter
+        
+        if (materialsFilter === "ready" && !hasBoth) return false
+        if (materialsFilter === "partial" && !(hasAny && !hasBoth)) return false
+        if (materialsFilter === "none" && hasAny) return false
+      }
       
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
@@ -340,7 +383,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
     }
 
     return result
-  }, [jobs, fitFilter, roleFamilyFilter, industryFilter, searchQuery, hideMalformed, sortBy])
+  }, [jobs, fitFilter, roleFamilyFilter, industryFilter, companyFilter, materialsFilter, searchQuery, hideMalformed, sortBy])
 
   // Group jobs by status
   const groupedJobs = useMemo(() => {
@@ -352,7 +395,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
     }
 
     filteredJobs.forEach((job) => {
-      const status = job.status
+      const status = normalizeJobStatus(job.status)
       if (STATUS_GROUP_CONFIG.active.statuses.includes(status as any)) {
         groups.active.push(job)
       } else if (STATUS_GROUP_CONFIG.applied.statuses.includes(status as any)) {
@@ -372,12 +415,14 @@ export function JobsTable({ jobs }: JobsTableProps) {
   // Count malformed
   const malformedCount = useMemo(() => jobs.filter(isMalformedJob).length, [jobs])
 
-  const hasFilters = fitFilter !== "ALL" || roleFamilyFilter !== "ALL" || industryFilter !== "ALL" || searchQuery !== ""
+  const hasFilters = fitFilter !== "ALL" || roleFamilyFilter !== "ALL" || industryFilter !== "ALL" || companyFilter !== "ALL" || materialsFilter !== "ALL" || searchQuery !== ""
 
   const clearFilters = () => {
     setFitFilter("ALL")
     setRoleFamilyFilter("ALL")
     setIndustryFilter("ALL")
+    setCompanyFilter("ALL")
+    setMaterialsFilter("ALL")
     setSearchQuery("")
   }
 
@@ -469,6 +514,40 @@ export function JobsTable({ jobs }: JobsTableProps) {
                 </Select>
               </div>
             )}
+
+            {/* Company filter */}
+            {uniqueCompanies.length > 1 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Company</label>
+                <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                  <SelectTrigger className="w-[180px] h-9">
+                    <SelectValue placeholder="All Companies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Companies</SelectItem>
+                    {uniqueCompanies.map((company) => (
+                      <SelectItem key={company} value={company}>{company}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Materials filter */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Materials</label>
+              <Select value={materialsFilter} onValueChange={(v) => setMaterialsFilter(v as typeof materialsFilter)}>
+                <SelectTrigger className="w-[130px] h-9">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="ready">Ready</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Sort */}
             <div className="flex flex-col gap-1.5">
