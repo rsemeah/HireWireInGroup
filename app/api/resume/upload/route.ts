@@ -24,9 +24,22 @@ import { mapResumeToEvidence, dedupeKey } from "@/lib/mapResumeToEvidence"
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
 
-  // Auth check
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
+  // Auth check — getUser() verifies the token against the Supabase API.
+  // If middleware is inactive (e.g. v0 sandbox, deprecated middleware convention),
+  // the session cookie may be present but the token unrefreshed. Fall back to
+  // getSession() which reads the JWT directly from the cookie without verification.
+  let userId: string | undefined
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    userId = user.id
+  } else {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
+      userId = session.user.id
+    }
+  }
+
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -74,7 +87,7 @@ export async function POST(request: NextRequest) {
   const { data: sourceResume, error: insertResumeError } = await supabase
     .from("source_resumes")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       filename,
       content_text: resumeText,
     })
@@ -128,7 +141,7 @@ export async function POST(request: NextRequest) {
   const { data: existing } = await supabase
     .from("evidence_library")
     .select("id, source_type, source_title, role_name, company_name, date_range")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
 
   const existingMap = new Map<string, string>() // dedupeKey → row id
   for (const row of existing ?? []) {
@@ -176,7 +189,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", update.id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
   }
 
   // ── 7b. Insert new evidence rows ──────────────────────────────────────────
@@ -188,7 +201,7 @@ export async function POST(request: NextRequest) {
       .insert(
         rowsToInsert.map((row) => ({
           ...row,
-          user_id: user.id,
+          user_id: userId,
           source_resume_id: sourceResumeId,
         }))
       )

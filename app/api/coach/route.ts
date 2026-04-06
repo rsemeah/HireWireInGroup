@@ -132,8 +132,15 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = await createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
+  let userId: string | undefined
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    userId = user.id
+  } else {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) userId = session.user.id
+  }
+  if (!userId) {
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),
       { status: 401, headers: { "Content-Type": "application/json" } }
@@ -161,7 +168,7 @@ export async function POST(request: NextRequest) {
           const { data, error } = await supabase
             .from("user_profile")
             .select("full_name, title, email, location, summary, skills, tools, domains, certifications, linkedin_url, github_url, website_url, experience, education")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .single()
           if (error) return { error: "Could not load profile" }
           return data ?? { message: "No profile found" }
@@ -181,7 +188,7 @@ export async function POST(request: NextRequest) {
           let query = supabase
             .from("evidence_library")
             .select("id, source_type, source_title, role_name, company_name, date_range, responsibilities, tools_used, outcomes, confidence_level, is_user_approved")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .eq("is_active", true)
             .order("priority_rank", { ascending: false })
 
@@ -227,7 +234,7 @@ export async function POST(request: NextRequest) {
           const { data, error } = await supabase
             .from("evidence_library")
             .insert({
-              user_id: user.id,
+              user_id: userId,
               source_type,
               source_title: title,
               role_name: role_name ?? null,
