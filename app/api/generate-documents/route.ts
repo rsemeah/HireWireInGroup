@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateText, generateObject } from "ai"
 import { z } from "zod"
+import { createAdminClient, createClient } from "@/lib/supabase/server"
 import { createClient } from "@/lib/supabase/server"
 import { groq, isGroqConfigured, MODELS } from "@/lib/adapters/groq"
 import { GenerateDocumentsInputSchema } from "@/lib/schemas/job-intake"
@@ -97,6 +98,7 @@ const QualityCheckSchema = z.object({
   improvement_suggestions: z.array(z.string()).describe("Specific suggestions to improve weak sections"),
 })
 
+async function loadUserProfile(supabase: ReturnType<typeof createAdminClient>, userId: string) {
 async function loadUserProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile, error } = await supabase
     .from("user_profile")
@@ -111,6 +113,7 @@ async function loadUserProfile(supabase: Awaited<ReturnType<typeof createClient>
   return profile
 }
 
+async function loadEvidenceLibrary(supabase: ReturnType<typeof createAdminClient>, userId: string) {
 async function loadEvidenceLibrary(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: evidence, error } = await supabase
     .from("evidence_library")
@@ -126,6 +129,7 @@ async function loadEvidenceLibrary(supabase: Awaited<ReturnType<typeof createCli
   return evidence || []
 }
 
+async function loadJobAnalysis(supabase: ReturnType<typeof createAdminClient>, jobId: string, userId: string) {
 async function loadJobAnalysis(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string, userId: string) {
   const { data: job, error } = await supabase
     .from("jobs")
@@ -253,6 +257,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Authenticate the requesting user — admin client is used for writes,
+    // but all reads are scoped to user_id so cross-tenant reads are impossible.
+    const userClient = await createClient()
+    const { data: { user }, error: authError } = await userClient.auth.getUser()
     const supabase = await createClient()
     const {
       data: { user },
@@ -266,9 +274,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const supabase = createAdminClient()
+
     // Set status to 'generating' immediately
     await supabase
       .from("jobs")
+      .update({
       .update({ 
         status: "generating",
         generation_status: "generating",
@@ -279,6 +290,11 @@ export async function POST(request: NextRequest) {
       .eq("id", job_id)
       .eq("user_id", user.id)
 
+    // Load all required data in parallel — all queries scoped to user_id
+    const [profile, allEvidence, jobData] = await Promise.all([
+      loadUserProfile(supabase, user.id),
+      loadEvidenceLibrary(supabase, user.id),
+      loadJobAnalysis(supabase, job_id, user.id),
     // Load all required data in parallel
     const [profile, allEvidence, jobData, sourceResume] = await Promise.all([
       loadUserProfile(supabase, user.id),

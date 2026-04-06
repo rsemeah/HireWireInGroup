@@ -553,6 +553,7 @@ function RequirementCard({
                           </Badge>
                         </div>
                         {evidence.company_name && (
+                          <p className="text-xs text-muted-foreground">{evidence.company_name}{evidence.role_name ? ` - ${evidence.role_name}` : ""}</p>
                           <p className="text-xs text-muted-foreground">{evidence.company_name}{(evidence as { role_title?: string }).role_title ? ` - ${(evidence as { role_title?: string }).role_title}` : ""}</p>
                         )}
                         {evidence.outcomes && evidence.outcomes.length > 0 && (

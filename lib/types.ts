@@ -319,7 +319,7 @@ export interface Job {
 
 export interface EvidenceRecord {
   id: string
-  source_type: "work_experience" | "project" | "portfolio_entry" | "shipped_product" | "live_site" | "achievement" | "certification" | "publication" | "open_source"
+  source_type: "work_experience" | "project" | "portfolio_entry" | "shipped_product" | "live_site" | "achievement" | "certification" | "publication" | "open_source" | "education" | "skill"
   source_title: string
   source_url?: string | null
   
@@ -358,6 +358,9 @@ export interface EvidenceRecord {
   is_user_approved: boolean
   visibility_status: "active" | "hidden" | "archived"
   
+  // Provenance
+  source_resume_id?: string | null
+
   // Metadata
   is_active: boolean
   priority_rank?: number
@@ -381,6 +384,9 @@ export interface UserProfile {
   skills: string[]
   certifications: string[]
   links: Record<string, string>
+  linkedin_url?: string | null
+  github_url?: string | null
+  website_url?: string | null
   created_at: string
   updated_at: string
 }
