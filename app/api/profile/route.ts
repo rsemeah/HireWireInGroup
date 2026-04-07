@@ -3,29 +3,32 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   const supabase = await createClient()
-
   const { data: { user }, error: authError } = await supabase.auth.getUser()
+
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { data, error } = await supabase
+  const { data: profile, error } = await supabase
     .from("user_profile")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle()
 
-  if (error && error.code !== "PGRST116") {
+  if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data || null)
+  return NextResponse.json({
+    ...profile,
+    email: user.email,
+  })
 }
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-
   const { data: { user }, error: authError } = await supabase.auth.getUser()
+
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
@@ -39,60 +42,43 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (existing) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("user_profile")
       .update({
         full_name: body.full_name,
-        title: body.title ?? null,
-        email: body.email || user.email,
-        phone: body.phone,
+        headline: body.headline,
         location: body.location,
         summary: body.summary,
-        experience: body.experience,
-        education: body.education,
+        years_experience: body.years_experience,
         skills: body.skills,
-        avatar_url: body.avatar_url,
-        linkedin_url: body.linkedin_url ?? null,
-        github_url: body.github_url ?? null,
-        website_url: body.website_url ?? null,
+        linkedin_url: body.linkedin_url,
+        portfolio_url: body.portfolio_url,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", existing.id)
       .eq("user_id", user.id)
-      .select()
-      .single()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-
-    return NextResponse.json(data)
   } else {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("user_profile")
       .insert({
         user_id: user.id,
         full_name: body.full_name,
-        title: body.title ?? null,
-        email: body.email || user.email,
-        phone: body.phone,
+        headline: body.headline,
         location: body.location,
         summary: body.summary,
-        experience: body.experience,
-        education: body.education,
+        years_experience: body.years_experience,
         skills: body.skills,
-        avatar_url: body.avatar_url,
-        linkedin_url: body.linkedin_url ?? null,
-        github_url: body.github_url ?? null,
-        website_url: body.website_url ?? null,
+        linkedin_url: body.linkedin_url,
+        portfolio_url: body.portfolio_url,
       })
-      .select()
-      .single()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-
-    return NextResponse.json(data)
   }
+
+  return NextResponse.json({ success: true })
 }
