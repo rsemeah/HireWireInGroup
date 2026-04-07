@@ -1,6 +1,6 @@
 /**
  * POST /api/coach
- * 
+ *
  * HireWire AI Coach endpoint with:
  * - Plan enforcement (Pro-gated)
  * - Safety checks
