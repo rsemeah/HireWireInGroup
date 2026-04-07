@@ -222,6 +222,20 @@ export default function TemplatesPage() {
         </div>
       </div>
 
+      {/* Disclaimer Banner */}
+      <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+        <CardContent className="flex items-start gap-3 p-4">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-800 dark:text-amber-400">Preview Only</p>
+            <p className="text-amber-700 dark:text-amber-500">
+              These settings are stored locally in your browser and are not yet connected to the document generation engine. 
+              Changes here won&apos;t affect your generated resumes or cover letters. We&apos;re working on full customization support.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="gallery" className="space-y-6">
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="gallery" className="flex items-center gap-2">

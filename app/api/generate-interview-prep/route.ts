@@ -546,7 +546,7 @@ This should fit on one page and be scannable in under 1 minute.
       behavioral_stories: (storiesResult.stories as BehavioralStory[]).map((s, i) => ({ ...s, id: `story-${i}` })),
       likely_questions: questionsResult as LikelyQuestions,
       resume_defense: (defenseResult.items as ResumeDefenseItem[]).map((d, i) => ({ ...d, id: `defense-${i}` })),
-      gap_handling: (gapsResult.gaps as GapHandlingItem[]).map((g, i) => ({ ...g, id: `gap-${i}` })),
+      gap_handling: (gapsResult.gaps as GapHandlingItem[]).map((g, i) => ({ ...g, id: `prep-gap-${i}` })),
       company_alignment: alignmentResult as CompanyAlignment,
       questions_to_ask: questionsToAskResult as QuestionsToAsk,
       objection_handling: (objectionsResult.objections as ObjectionHandlingItem[]).map((o, i) => ({ ...o, id: `objection-${i}` })),

@@ -11,8 +11,8 @@
  *   7. Deduplicate + insert / update evidence_library
  *   8. Return canonical summary
  *
- * Canonical source_resumes columns: user_id, filename, content_text, parsed_data
- * No file_name, parsed_text, parse_status, parsed_at, is_primary.
+ * source_resumes columns: user_id, file_name, parsed_text, file_type, 
+ * parsed_data, parse_status, parsed_at, is_primary.
  */
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -104,8 +104,10 @@ export async function POST(request: NextRequest) {
       .from("source_resumes")
       .insert({
         user_id: userId,
-        filename,
-        content_text: rawText,
+        file_name: filename,
+        parsed_text: rawText,
+        file_type: "text/plain",
+        parse_status: "pending",
       })
       .select("id")
       .single()
@@ -136,7 +138,11 @@ export async function POST(request: NextRequest) {
     // ── 4. Update source_resumes with parsed_data ────────────────────────────
     await supabase
       .from("source_resumes")
-      .update({ parsed_data: parsed })
+      .update({ 
+        parsed_data: parsed,
+        parse_status: "completed",
+        parsed_at: new Date().toISOString(),
+      })
       .eq("id", sourceResumeId)
 
     // ── 5. Pre-fill user_profile if fields are empty ─────────────────────────
@@ -298,7 +304,7 @@ export async function GET() {
 
     const { data: resumes, error } = await supabase
       .from("source_resumes")
-      .select("id, filename, content_text, parsed_data, created_at")
+      .select("id, file_name, parsed_text, parsed_data, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
 

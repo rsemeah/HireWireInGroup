@@ -9,24 +9,13 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
-  }
-  
   const { data, error } = await supabase
     .from("user_profile")
     .select("*")
     .eq("user_id", user.id)
-    .single()
-
     .maybeSingle()
-  
-  if (error && error.code !== "PGRST116") {
+
+  if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
@@ -39,13 +28,6 @@ export async function POST(request: Request) {
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
   const body = await request.json()
@@ -54,30 +36,28 @@ export async function POST(request: Request) {
     .from("user_profile")
     .select("id")
     .eq("user_id", user.id)
-    .single()
-
     .maybeSingle()
-  
+
+  const profileFields = {
+    full_name: body.full_name,
+    title: body.title ?? null,
+    email: body.email || user.email,
+    phone: body.phone,
+    location: body.location,
+    summary: body.summary,
+    experience: body.experience,
+    education: body.education,
+    skills: body.skills,
+    avatar_url: body.avatar_url,
+    linkedin_url: body.linkedin_url ?? null,
+    github_url: body.github_url ?? null,
+    website_url: body.website_url ?? null,
+  }
+
   if (existing) {
     const { data, error } = await supabase
       .from("user_profile")
-      .update({
-        full_name: body.full_name,
-        title: body.title ?? null,
-        email: body.email,
-        email: body.email || user.email,
-        phone: body.phone,
-        location: body.location,
-        summary: body.summary,
-        experience: body.experience,
-        education: body.education,
-        skills: body.skills,
-        avatar_url: body.avatar_url,
-        linkedin_url: body.linkedin_url ?? null,
-        github_url: body.github_url ?? null,
-        website_url: body.website_url ?? null,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...profileFields, updated_at: new Date().toISOString() })
       .eq("id", existing.id)
       .eq("user_id", user.id)
       .select()
@@ -91,23 +71,7 @@ export async function POST(request: Request) {
   } else {
     const { data, error } = await supabase
       .from("user_profile")
-      .insert({
-        user_id: user.id,
-        full_name: body.full_name,
-        title: body.title ?? null,
-        email: body.email,
-        email: body.email || user.email,
-        phone: body.phone,
-        location: body.location,
-        summary: body.summary,
-        experience: body.experience,
-        education: body.education,
-        skills: body.skills,
-        avatar_url: body.avatar_url,
-        linkedin_url: body.linkedin_url ?? null,
-        github_url: body.github_url ?? null,
-        website_url: body.website_url ?? null,
-      })
+      .insert({ user_id: user.id, ...profileFields })
       .select()
       .single()
 
