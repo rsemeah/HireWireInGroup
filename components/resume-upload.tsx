@@ -95,7 +95,7 @@ export function ResumeUpload({ existingResumes = [], onUploadComplete, compact =
       }
 
       if (data.source_resume_id) {
-        onUploadComplete?.({ id: data.source_resume_id, filename, created_at: new Date().toISOString(), parsed_data: null })
+        onUploadComplete?.({ id: data.source_resume_id, file_name: file.name, created_at: new Date().toISOString(), parsed_data: null })
       }
     } catch (error) {
       console.error("Upload error:", error)
