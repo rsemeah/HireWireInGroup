@@ -149,9 +149,11 @@ IMPORTANT:
       .from("source_resumes")
       .insert({
         user_id: userId,
-        filename: file.name,
-        content_text: rawText,
+        file_name: file.name,
+        parsed_text: rawText,
         parsed_data: parsedData,
+        parse_status: "completed",
+        parsed_at: new Date().toISOString(),
       })
       .select("id")
       .single()
