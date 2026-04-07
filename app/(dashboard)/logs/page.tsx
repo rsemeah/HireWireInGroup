@@ -294,46 +294,17 @@ export default async function LogsPage() {
     )
   }
 
-  // Fallback: Generate activity from job data
-  const activities = jobs.flatMap(job => {
-    const items = []
-    
-    if (job.created_at) {
-      items.push({
-        id: `${job.id}-created`,
-        type: "created",
-        title: `Job added: ${job.title}`,
-        company: job.company,
-        jobId: job.id,
-        timestamp: job.created_at,
-      })
-    }
-    
-    if (job.score !== null && job.created_at) {
-      items.push({
-        id: `${job.id}-scored`,
-        type: "scored",
-        title: `Scored: ${job.title}`,
-        company: job.company,
-        jobId: job.id,
-        detail: `Score: ${job.score}, Fit: ${job.fit || "Unscored"}`,
-        timestamp: job.created_at,
-      })
-    }
-    
-    if (normalizeJobStatus(job.status) === "applied" && job.created_at) {
-      items.push({
-        id: `${job.id}-applied`,
-        type: "applied",
-        title: `Applied: ${job.title}`,
-        company: job.company,
-        jobId: job.id,
-        timestamp: job.created_at,
-      })
-    }
-    
-    return items
-  }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  // Show honest empty state instead of synthesizing fake events
+  // This respects the TruthSerum principle - no fabricated activity logs
+  const activities: Array<{
+    id: string
+    type: string
+    title: string
+    company?: string
+    jobId?: string
+    detail?: string
+    timestamp: string
+  }> = []
 
   return (
     <div className="space-y-8 max-w-6xl">
@@ -349,15 +320,15 @@ export default async function LogsPage() {
       </div>
 
       {!hasEventsTable && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
+        <Card className="border-muted bg-muted/20">
           <CardContent className="py-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+              <AlertTriangle className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div>
-                <h4 className="font-medium text-amber-600">Limited Activity Data</h4>
+                <h4 className="font-medium">Event Logging Not Configured</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The <code className="text-xs bg-muted px-1 py-0.5 rounded">processing_events</code> table 
-                  is not available. Showing activity derived from jobs.
+                  Processing events will appear here as jobs are analyzed and documents are generated.
+                  Events are logged in real-time during HireWire operations.
                 </p>
               </div>
             </div>
@@ -406,8 +377,8 @@ export default async function LogsPage() {
       {activities.length === 0 ? (
         <EmptyState 
           variant="default"
-          title="No activity yet"
-          message="Activity will appear here as you review and apply to jobs."
+          title="No processing events yet"
+          message="Events appear here as jobs are analyzed and documents are generated. Add a job to get started."
         />
       ) : (
         <Card>

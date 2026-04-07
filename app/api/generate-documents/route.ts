@@ -303,6 +303,41 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
+    // === PLAN ENFORCEMENT ===
+    // Check user's plan and generation count this month
+    const { data: userData } = await supabase
+      .from("users")
+      .select("plan_type")
+      .eq("id", userId)
+      .single()
+    
+    const plan = userData?.plan_type || "free"
+    
+    // Free users: 5 generations per month
+    if (plan === "free") {
+      const monthStart = new Date()
+      monthStart.setDate(1)
+      monthStart.setHours(0, 0, 0, 0)
+      
+      const { count: generationsThisMonth } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .not("generated_resume", "is", null)
+        .gte("generation_timestamp", monthStart.toISOString())
+      
+      if ((generationsThisMonth || 0) >= 5) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: "generation_limit_reached",
+            user_message: "You've reached your monthly limit of 5 document generations. Upgrade to Pro for unlimited generations."
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Set status to 'generating' immediately
     await supabase
       .from("jobs")
