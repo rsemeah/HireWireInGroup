@@ -36,8 +36,8 @@ type SortOption = "newest" | "oldest" | "company" | "title"
 
 interface DocumentJob {
   id: string
-  title: string
-  company: string
+  role_title: string | null
+  company_name: string | null
   generated_resume: string | null
   generated_cover_letter: string | null
   generation_status: GenerationStatus | null
@@ -45,6 +45,7 @@ interface DocumentJob {
   generation_quality_score: number | null
   quality_passed: boolean | null
   created_at: string
+  job_analyses: Array<{ title: string; company: string }> | null
 }
 
 const STATUS_CONFIGS: Record<GenerationStatus, {
@@ -118,15 +119,16 @@ export default function DocumentsPage() {
           .from("jobs")
           .select(`
             id,
-            title,
-            company,
+            role_title,
+            company_name,
             generated_resume,
             generated_cover_letter,
             generation_status,
             generation_timestamp,
             generation_quality_score,
             quality_passed,
-            created_at
+            created_at,
+            job_analyses(title, company)
           `)
           .eq("user_id", user.id)
           .is("deleted_at", null)
@@ -165,10 +167,11 @@ export default function DocumentsPage() {
     // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      result = result.filter(job => 
-        job.title.toLowerCase().includes(query) ||
-        job.company.toLowerCase().includes(query)
-      )
+      result = result.filter(job => {
+        const title = job.job_analyses?.[0]?.title || job.role_title || ""
+        const company = job.job_analyses?.[0]?.company || job.company_name || ""
+        return title.toLowerCase().includes(query) || company.toLowerCase().includes(query)
+      })
     }
     
     // Apply status filter
@@ -191,10 +194,18 @@ export default function DocumentsPage() {
         )
         break
       case "company":
-        result.sort((a, b) => a.company.localeCompare(b.company))
+        result.sort((a, b) => {
+          const companyA = a.job_analyses?.[0]?.company || a.company_name || ""
+          const companyB = b.job_analyses?.[0]?.company || b.company_name || ""
+          return companyA.localeCompare(companyB)
+        })
         break
       case "title":
-        result.sort((a, b) => a.title.localeCompare(b.title))
+        result.sort((a, b) => {
+          const titleA = a.job_analyses?.[0]?.title || a.role_title || ""
+          const titleB = b.job_analyses?.[0]?.title || b.role_title || ""
+          return titleA.localeCompare(titleB)
+        })
         break
     }
     
@@ -402,7 +413,7 @@ export default function DocumentsPage() {
                             href={`/jobs/${job.id}`}
                             className="font-medium hover:underline truncate"
                           >
-                            {job.title}
+                            {job.job_analyses?.[0]?.title || job.role_title || "Untitled"}
                           </Link>
                           <Badge variant={config.badgeVariant} className="shrink-0">
                             {config.label}
@@ -412,7 +423,7 @@ export default function DocumentsPage() {
                         <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Building2 className="h-3 w-3" />
-                            {job.company}
+                            {job.job_analyses?.[0]?.company || job.company_name || "Unknown"}
                           </span>
                           {job.generation_timestamp && (
                             <span className="flex items-center gap-1">
@@ -461,8 +472,8 @@ export default function DocumentsPage() {
                           resumeText={job.generated_resume || undefined}
                           coverLetterText={job.generated_cover_letter || undefined}
                           candidateName={candidateName}
-                          company={job.company}
-                          role={job.title}
+                          company={job.job_analyses?.[0]?.company || job.company_name || "Unknown"}
+                          role={job.job_analyses?.[0]?.title || job.role_title || "Position"}
                         />
                       )}
 
