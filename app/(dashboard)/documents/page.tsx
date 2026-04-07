@@ -87,6 +87,8 @@ const STATUS_CONFIGS: Record<GenerationStatus, {
 }
 
 export default function DocumentsPage() {
+  console.log("[v0] DocumentsPage component rendering")
+  
   const [jobs, setJobs] = useState<DocumentJob[]>([])
   const [filteredJobs, setFilteredJobs] = useState<DocumentJob[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,15 +99,20 @@ export default function DocumentsPage() {
 
   // Load jobs with generated documents
   useEffect(() => {
+    console.log("[v0] Documents useEffect starting")
     async function loadDocuments() {
+      console.log("[v0] loadDocuments() called")
       try {
         const { createClient } = await import("@/lib/supabase/client")
         const supabase = createClient()
 
+        console.log("[v0] Supabase client created, fetching user...")
         const {
           data: { user },
         } = await supabase.auth.getUser()
 
+        console.log("[v0] User fetched:", user ? user.id : "no user")
+        
         if (!user) {
           setJobs([])
           setFilteredJobs([])
