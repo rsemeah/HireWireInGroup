@@ -90,7 +90,7 @@ export function detectGaps(
     
     if (coverage.level === "none" || coverage.level === "weak") {
       gaps.push({
-        id: `gap-${gapIndex++}`,
+        id: `detect-gap-${gapIndex++}`,
         category: categorizeGap(requirement),
         severity: "critical",
         requirement,
@@ -116,7 +116,7 @@ export function detectGaps(
 
     if (!hasEvidence) {
       gaps.push({
-        id: `gap-${gapIndex++}`,
+        id: `detect-gap-${gapIndex++}`,
         category: "missing_tool",
         severity: techStack.indexOf(tech) < 3 ? "critical" : "important",
         requirement: tech,
@@ -136,7 +136,7 @@ export function detectGaps(
       const isRelevant = isEvidenceRelevantToJob(evidence, jobAnalysis)
       if (isRelevant) {
         gaps.push({
-          id: `gap-${gapIndex++}`,
+          id: `detect-gap-${gapIndex++}`,
           category: "missing_metric",
           severity: "important",
           requirement: "Quantified achievement",
@@ -157,7 +157,7 @@ export function detectGaps(
       // Avoid duplicates
       if (!gaps.some(g => g.requirement.toLowerCase() === gapText.toLowerCase())) {
         gaps.push({
-          id: `gap-${gapIndex++}`,
+          id: `detect-gap-${gapIndex++}`,
           category: categorizeGap(gapText),
           severity: "important",
           requirement: gapText,
