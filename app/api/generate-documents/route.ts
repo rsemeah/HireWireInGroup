@@ -124,7 +124,6 @@ const QualityCheckSchema = z.object({
   improvement_suggestions: z.array(z.string()).describe("Specific suggestions to improve weak sections"),
 })
 
-async function loadUserProfile(supabase: ReturnType<typeof createAdminClient>, userId: string) {
 async function loadUserProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile, error } = await supabase
     .from("user_profile")
@@ -139,7 +138,6 @@ async function loadUserProfile(supabase: Awaited<ReturnType<typeof createClient>
   return profile
 }
 
-async function loadEvidenceLibrary(supabase: ReturnType<typeof createAdminClient>, userId: string) {
 async function loadEvidenceLibrary(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: evidence, error } = await supabase
     .from("evidence_library")
@@ -155,7 +153,6 @@ async function loadEvidenceLibrary(supabase: Awaited<ReturnType<typeof createCli
   return evidence || []
 }
 
-async function loadJobAnalysis(supabase: ReturnType<typeof createAdminClient>, jobId: string, userId: string) {
 async function loadJobAnalysis(supabase: Awaited<ReturnType<typeof createClient>>, jobId: string, userId: string) {
   const { data: job, error } = await supabase
     .from("jobs")
