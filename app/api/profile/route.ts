@@ -8,13 +8,13 @@ export async function GET() {
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  
+
   const { data, error } = await supabase
     .from("user_profile")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle()
-  
+
   if (error && error.code !== "PGRST116") {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     .select("id")
     .eq("user_id", user.id)
     .maybeSingle()
-  
+
   if (existing) {
     const { data, error } = await supabase
       .from("user_profile")
