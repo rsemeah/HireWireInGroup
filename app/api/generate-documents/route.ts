@@ -207,9 +207,10 @@ async function loadJobAnalysis(supabase: Awaited<ReturnType<typeof createClient>
 async function loadSourceResume(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: resume, error } = await supabase
     .from("source_resumes")
-    .select("*")
+    .select("id, filename, content_text, parsed_data, created_at")
     .eq("user_id", userId)
-    .eq("is_primary", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (error || !resume) {
@@ -283,17 +284,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Authenticate the requesting user — admin client is used for writes,
-    // but all reads are scoped to user_id so cross-tenant reads are impossible.
+    // Auth with getSession() fallback for v0 sandbox
     const userClient = await createClient()
-    const { data: { user }, error: authError } = await userClient.auth.getUser()
-    const supabase = await createClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    let userId: string | undefined
+    const { data: { user } } = await userClient.auth.getUser()
+    if (user) {
+      userId = user.id
+    } else {
+      const { data: { session } } = await userClient.auth.getSession()
+      if (session?.user) userId = session.user.id
+    }
+    if (!userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
@@ -305,7 +306,6 @@ export async function POST(request: NextRequest) {
     // Set status to 'generating' immediately
     await supabase
       .from("jobs")
-      .update({
       .update({ 
         status: "generating",
         generation_status: "generating",
@@ -314,19 +314,14 @@ export async function POST(request: NextRequest) {
         last_generation_at: new Date().toISOString()
       })
       .eq("id", job_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
 
-    // Load all required data in parallel — all queries scoped to user_id
-    const [profile, allEvidence, jobData] = await Promise.all([
-      loadUserProfile(supabase, user.id),
-      loadEvidenceLibrary(supabase, user.id),
-      loadJobAnalysis(supabase, job_id, user.id),
     // Load all required data in parallel
     const [profile, allEvidence, jobData, sourceResume] = await Promise.all([
-      loadUserProfile(supabase, user.id),
-      loadEvidenceLibrary(supabase, user.id),
-      loadJobAnalysis(supabase, job_id, user.id),
-      loadSourceResume(supabase, user.id),
+      loadUserProfile(supabase, userId),
+      loadEvidenceLibrary(supabase, userId),
+      loadJobAnalysis(supabase, job_id, userId),
+      loadSourceResume(supabase, userId),
     ])
 
     // HARD FAIL: Evidence is required for document generation
@@ -339,7 +334,7 @@ export async function POST(request: NextRequest) {
           generation_error: "evidence_required",
         })
         .eq("id", job_id)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
       
       return NextResponse.json(
         { 
@@ -362,7 +357,7 @@ export async function POST(request: NextRequest) {
           generation_error: "profile_required",
         })
         .eq("id", job_id)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
       
       return NextResponse.json(
         { 
@@ -458,10 +453,10 @@ Education:
 ${effectiveEducation.map((edu: { degree: string; school: string; year?: string }) => `
 - ${edu.degree} from ${edu.school} ${edu.year ? `(${edu.year})` : ""}
 `).join("\n")}
-${sourceResume?.parsed_text ? `
+${sourceResume?.content_text ? `
 ADDITIONAL CONTEXT FROM SOURCE RESUME:
 (Use this for additional details if the structured data above is incomplete)
-${sourceResume.parsed_text.slice(0, 5000)}
+${sourceResume.content_text.slice(0, 5000)}
 ` : ""}
 `
 
@@ -588,7 +583,7 @@ Be conservative - only include matches that are clearly supported by the evidenc
           generation_error: "Generation blocked: role too much of a stretch",
         })
         .eq("id", job_id)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
 
       return NextResponse.json({
         success: false,
@@ -981,7 +976,7 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
         quality_passed: qualityPassed,
       })
       .eq("id", job_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
 
     if (updateError) {
       console.error("Error updating job:", updateError)
@@ -999,12 +994,12 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
           ats_match_score: evidenceMap.fit_score,
         })
         .eq("id", jobAnalysis.id)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
     }
 
     // Save quality check
     await supabase.from("generation_quality_checks").insert({
-      user_id: user.id,
+      user_id: userId,
       job_id,
       document_type: "resume",
       invented_claims_found: qualityCheck.invented_claims,
@@ -1102,7 +1097,7 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
               generation_error: errorMessage
             })
             .eq("id", job_id)
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
         }
       }
     } catch {
