@@ -220,9 +220,10 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <Card className="border-0 shadow-none lg:border lg:shadow-sm">
-        <CardContent className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <Card className="border-0 shadow-none lg:border lg:shadow-sm bg-white">
+        <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading login...</p>
         </CardContent>
       </Card>
     }>
