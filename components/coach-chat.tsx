@@ -91,17 +91,10 @@ export function CoachChat({ className, conversationId, compact = false, onClose,
       hasInitialMessage: !!initialMessage 
     })
   }, [])
-  
-  useEffect(() => {
-    if (error) {
-      console.error("[v0] CoachChat error state:", error)
-    }
-  }, [error])
 
   // Send initial message on mount if provided
   useEffect(() => {
     if (initialMessage && !initialMessageSent.current && messages.length === 0) {
-      console.log("[v0] CoachChat sending initial message:", initialMessage.substring(0, 50))
       initialMessageSent.current = true
       append({ role: "user", content: initialMessage })
     }
