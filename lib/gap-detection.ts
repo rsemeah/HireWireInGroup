@@ -476,75 +476,98 @@ function assessEducationCoverage(
   evidenceLibrary: EvidenceRecord[]
 ): EducationAssessment {
   const requiredDegree = extractDegreeLevel(requirement)
+  const reqLower = requirement.toLowerCase()
   
   // Check education evidence in library
   const educationEvidence = evidenceLibrary.filter(e => e.source_type === "education")
   const educationText = educationEvidence.map(e => e.source_title || e.role_name).join(", ")
   
-  // Case 1: User has qualifying degree
+  // Case 1: User has qualifying degree from profile
+  // If user has Bachelor's and job requires Bachelor's (or lower), it's satisfied
   if (requiredDegree && userDegrees.length > 0) {
     if (meetsOrExceedsDegreeRequirement(userDegrees, requiredDegree)) {
+      const userHighest = userDegrees[0] // Already sorted by highest
+      const matchDesc = userHighest === requiredDegree 
+        ? `You have the required ${requiredDegree}'s degree`
+        : `Your ${userHighest}'s degree exceeds the ${requiredDegree}'s requirement`
       return {
         classification: "satisfied",
         matchedEvidence: educationText || userDegrees.join(", "),
-        description: `Education requirement met: user has ${userDegrees.join(", ")}`,
+        description: matchDesc,
         requiredDegree,
       }
     }
   }
   
-  // Case 2: Has education evidence that might match (keyword overlap)
+  // Case 2: Check if requirement mentions experience as acceptable alternative
+  // Patterns: "or equivalent experience", "or X years", "degree or experience"
+  const acceptsExperience = 
+    reqLower.includes("or equivalent") ||
+    reqLower.includes("or experience") ||
+    reqLower.includes("years of experience") ||
+    /or \d+ years/i.test(requirement) ||
+    /\d+\+ years/i.test(requirement)
+  
+  if (acceptsExperience && yearsExperience > 0) {
+    const substitution = canExperienceSubstitute(yearsExperience, requiredDegree || "bachelor")
+    if (substitution.canSubstitute) {
+      return {
+        classification: substitution.confidence === "high" ? "satisfied" : "equivalent_experience",
+        matchedEvidence: `${yearsExperience} years of professional experience`,
+        description: `Your ${yearsExperience} years of experience ${substitution.confidence === "high" ? "satisfies" : "may satisfy"} this requirement`,
+        requiredDegree,
+      }
+    }
+  }
+  
+  // Case 3: Has education evidence in library that might match (keyword overlap)
   if (educationEvidence.length > 0) {
-    const reqLower = requirement.toLowerCase()
     const evidenceMatches = educationEvidence.some(e => {
       const text = `${e.source_title} ${e.role_name}`.toLowerCase()
-      return reqLower.split(" ").some(word => word.length > 3 && text.includes(word))
+      return reqLower.split(" ").some(word => word.length > 4 && text.includes(word))
     })
     
     if (evidenceMatches) {
       return {
         classification: "likely_satisfied",
         matchedEvidence: educationText,
-        description: `Education evidence found that may satisfy: ${educationText}`,
+        description: `Education evidence found: ${educationText}`,
         requiredDegree,
       }
     }
   }
   
-  // Case 3: Check if experience can substitute (many jobs accept "or equivalent")
-  if (requirement.toLowerCase().includes("equivalent") || requirement.toLowerCase().includes("or experience")) {
-    const substitution = canExperienceSubstitute(yearsExperience, requiredDegree || "bachelor")
-    if (substitution.canSubstitute) {
-      return {
-        classification: "equivalent_experience",
-        matchedEvidence: `${yearsExperience} years of professional experience`,
-        description: `${yearsExperience} years of experience may satisfy this requirement in lieu of formal degree`,
-        requiredDegree,
-      }
-    }
-  }
-  
-  // Case 4: No degree but significant experience (potential equivalency)
+  // Case 4: No degree but significant experience (8+ years often accepted as equivalent)
   if (yearsExperience >= 8 && (!requiredDegree || requiredDegree === "bachelor")) {
     return {
       classification: "equivalent_experience",
       matchedEvidence: `${yearsExperience} years of professional experience`,
-      description: `Extensive experience (${yearsExperience} years) may demonstrate equivalent competency`,
+      description: `Your extensive experience (${yearsExperience} years) demonstrates equivalent competency`,
       requiredDegree,
     }
   }
   
-  // Case 5: Ambiguous - have some education but unclear if it matches
-  if (educationEvidence.length > 0 || userDegrees.length > 0) {
+  // Case 5: User has a degree but it doesn't match requirement level
+  if (userDegrees.length > 0 && requiredDegree) {
     return {
       classification: "ambiguous",
-      matchedEvidence: educationText || userDegrees.join(", "),
-      description: `Education on file but unclear if it satisfies: ${requirement}`,
+      matchedEvidence: userDegrees.join(", "),
+      description: `You have ${userDegrees.join(", ")} - confirm if this satisfies "${requirement}"`,
       requiredDegree,
     }
   }
   
-  // Case 6: Missing - no education evidence at all
+  // Case 6: Has some education evidence but unclear match
+  if (educationEvidence.length > 0) {
+    return {
+      classification: "ambiguous",
+      matchedEvidence: educationText,
+      description: `Education on file (${educationText}) - verify if it meets this requirement`,
+      requiredDegree,
+    }
+  }
+  
+  // Case 7: Missing - no education evidence at all
   return {
     classification: "missing",
     matchedEvidence: null,
