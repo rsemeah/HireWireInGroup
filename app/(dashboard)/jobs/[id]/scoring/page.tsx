@@ -505,7 +505,7 @@ export default function ScoringCenterPage() {
               <Target className="h-6 w-6 text-primary" />
               Scoring Center
             </h1>
-            <p className="text-muted-foreground">{job.title} at {job.company}</p>
+            <p className="text-muted-foreground">{job.role_title || job.title} at {job.company_name || job.company}</p>
           </div>
         </div>
       </div>
