@@ -31,6 +31,8 @@ import {
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import type { Job, EvidenceRecord } from "@/lib/types"
+import { canCompleteMatching } from "@/lib/semantic-gates"
+import { isEvidenceMappingComplete } from "@/lib/job-workflow"
 
 // TRUST FIX: Renamed from "Match" to "KeywordMatch" to be honest about what this is
 interface RequirementKeywordMatch {
@@ -53,6 +55,7 @@ export default function EvidenceMatchPage() {
   const [saving, setSaving] = useState(false)
   const [requirementMatches, setRequirementMatches] = useState<RequirementKeywordMatch[]>([])
   const [selectedEvidence, setSelectedEvidence] = useState<Set<string>>(new Set())
+  const [matchingMarkedComplete, setMatchingMarkedComplete] = useState(false)
 
   // Load job and evidence data
   useEffect(() => {
@@ -95,6 +98,8 @@ export default function EvidenceMatchPage() {
           responsibilities: analysis?.responsibilities || [],
         }
         setJob(mergedJob as Job)
+        // Check if matching was already marked complete
+        setMatchingMarkedComplete(isEvidenceMappingComplete(mergedJob as Job))
       }
       
       // Fetch all evidence - filtered by user_id for security
@@ -253,8 +258,21 @@ export default function EvidenceMatchPage() {
     })
   }
 
-  async function saveEvidenceMap() {
+  async function saveEvidenceMap(markComplete: boolean = false) {
     if (!job) return
+    
+    // Check gate for marking complete
+    if (markComplete) {
+      const gateResult = canCompleteMatching(job, overlapPercent)
+      if (!gateResult.allowed) {
+        toast.error(gateResult.reason || "Cannot complete matching yet")
+        return
+      }
+      if (gateResult.reason && gateResult.severity === "info") {
+        // Show warning but proceed
+        toast.info(gateResult.reason)
+      }
+    }
     
     setSaving(true)
     const supabase = createClient()
@@ -267,20 +285,26 @@ export default function EvidenceMatchPage() {
       return
     }
     
-    // Build evidence map
-    const evidenceMap: Record<string, string[]> = {}
+    // Build evidence map with metadata
+    const evidenceMap: Record<string, unknown> = {}
     requirementMatches.forEach(match => {
       evidenceMap[match.requirement] = match.matchedEvidence
         .filter(e => selectedEvidence.has(e.id))
         .map(e => e.id)
     })
     
+    // Add completion flags if marking complete
+    if (markComplete) {
+      evidenceMap.matching_complete = true
+      evidenceMap.completed_at = new Date().toISOString()
+    }
+    
     // Update job - filtered by user_id for security
     const { error } = await supabase
       .from("jobs")
       .update({ 
         evidence_map: evidenceMap,
-        status: "analyzed"
+        status: markComplete ? "analyzed" : job.status
       })
       .eq("id", jobId)
       .eq("user_id", user.id)
@@ -288,8 +312,13 @@ export default function EvidenceMatchPage() {
     if (error) {
       toast.error("Failed to save evidence map")
     } else {
-      toast.success("Evidence map saved")
-      router.push(`/jobs/${jobId}`)
+      if (markComplete) {
+        setMatchingMarkedComplete(true)
+        toast.success("Evidence mapping complete! Proceeding to scoring...")
+        router.push(`/jobs/${jobId}/scoring`)
+      } else {
+        toast.success("Evidence map saved (draft)")
+      }
     }
     
     setSaving(false)
@@ -375,10 +404,34 @@ export default function EvidenceMatchPage() {
               <p className="text-muted-foreground">{job.title} at {job.company}</p>
             </div>
           </div>
-          <Button onClick={saveEvidenceMap} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
-            Lock Evidence Map
-          </Button>
+          <div className="flex items-center gap-2">
+            {matchingMarkedComplete && (
+              <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Matching Complete
+              </Badge>
+            )}
+            <Button variant="outline" onClick={() => saveEvidenceMap(false)} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save Draft
+            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={() => saveEvidenceMap(true)} disabled={saving || matchingMarkedComplete}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Shield className="h-4 w-4 mr-2" />}
+                    {matchingMarkedComplete ? "Already Complete" : "Mark Complete & Continue"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs max-w-xs">
+                    Marks evidence matching as complete and proceeds to scoring. 
+                    {overlapPercent < 30 && " Warning: Low coverage may affect your fit score."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
 
         {/* TRUST FIX: Honest explanation of what this page does */}

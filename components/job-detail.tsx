@@ -54,6 +54,14 @@ import type { TemplateId } from "@/lib/resume-templates/types/ResumeProps"
 import { detectGaps, type GapAnalysisResult, type DetectedGap } from "@/lib/gap-detection"
 import { GapClarificationModal, type GapClarification } from "@/components/gap-clarification-modal"
 import { CoachGatedGeneration } from "@/components/coach-gated-generation"
+import {
+  deriveWorkflowStage,
+  getWorkflowState,
+  WORKFLOW_STAGES,
+  STAGE_LABELS,
+  STAGE_DESCRIPTIONS,
+  type WorkflowStage,
+} from "@/lib/job-workflow"
 
 // Available status transitions
 const STATUS_OPTIONS: JobStatus[] = [
@@ -350,6 +358,11 @@ export function JobDetail({ job }: JobDetailProps) {
     loadProfile()
   }, [])
 
+  // Semantic workflow state - derived from persisted artifacts
+  const workflowState = getWorkflowState(job)
+  const currentStage = workflowState.stage
+  const stageIndex = workflowState.stageIndex
+
   // Computed states
   const hasResume = !!job.generated_resume
   const hasCoverLetter = !!job.generated_cover_letter
@@ -598,6 +611,108 @@ export function JobDetail({ job }: JobDetailProps) {
           </Button>
         )}
       </div>
+
+      {/* Workflow Progress Bar - Semantic state visualization */}
+      <Card className="bg-muted/30">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" />
+              Workflow Progress
+            </h3>
+            <Badge variant="outline" className="text-xs">
+              {STAGE_LABELS[currentStage]}
+            </Badge>
+          </div>
+          
+          {/* Stage progress dots */}
+          <div className="flex items-center gap-1">
+            {WORKFLOW_STAGES.slice(0, -1).map((stage, idx) => {
+              const isComplete = idx < stageIndex
+              const isCurrent = idx === stageIndex
+              const isPending = idx > stageIndex
+              
+              return (
+                <div key={stage} className="flex-1 flex items-center">
+                  <div
+                    className={`
+                      flex-shrink-0 w-3 h-3 rounded-full transition-colors
+                      ${isComplete ? "bg-green-500" : ""}
+                      ${isCurrent ? "bg-primary ring-2 ring-primary/20" : ""}
+                      ${isPending ? "bg-muted-foreground/30" : ""}
+                    `}
+                    title={`${STAGE_LABELS[stage]}: ${STAGE_DESCRIPTIONS[stage]}`}
+                  />
+                  {idx < WORKFLOW_STAGES.length - 2 && (
+                    <div 
+                      className={`
+                        flex-1 h-0.5 mx-1
+                        ${isComplete ? "bg-green-500" : "bg-muted-foreground/20"}
+                      `}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          
+          {/* Stage labels (abbreviated) */}
+          <div className="flex items-center gap-1 mt-1">
+            {WORKFLOW_STAGES.slice(0, -1).map((stage, idx) => {
+              const isCurrent = idx === stageIndex
+              return (
+                <div key={stage} className="flex-1">
+                  <span 
+                    className={`
+                      text-[10px] truncate block
+                      ${isCurrent ? "font-medium text-primary" : "text-muted-foreground"}
+                    `}
+                    title={STAGE_LABELS[stage]}
+                  >
+                    {STAGE_LABELS[stage].split(" ")[0]}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          
+          {/* Next action hint */}
+          {workflowState.nextAction && !workflowState.isComplete && (
+            <div className="mt-3 flex items-center justify-between pt-3 border-t">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Next:</span>
+                <span className="font-medium text-foreground">{workflowState.nextAction.description}</span>
+              </div>
+              <Button 
+                size="sm" 
+                variant={workflowState.nextAction.variant}
+                asChild
+              >
+                <Link href={workflowState.nextAction.href}>
+                  {workflowState.nextAction.label}
+                </Link>
+              </Button>
+            </div>
+          )}
+          
+          {/* Blockers */}
+          {workflowState.blockers.length > 0 && (
+            <div className="mt-3 pt-3 border-t">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <span className="font-medium text-amber-600">Attention needed:</span>
+                  <ul className="mt-1 space-y-0.5">
+                    {workflowState.blockers.map((blocker, idx) => (
+                      <li key={idx} className="text-muted-foreground">{blocker}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Decision Summary - Most important, at top */}
       <Card className="border-l-4 border-l-primary">
