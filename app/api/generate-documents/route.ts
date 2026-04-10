@@ -487,13 +487,15 @@ export async function POST(request: NextRequest) {
       }>;
     } | null
 
-    // Merge profile with source resume data (profile takes precedence)
-    const effectiveName = profile?.full_name || sourceResumeData?.full_name || "Not provided"
-    const effectiveLocation = profile?.location || sourceResumeData?.location || "Not provided"
-    const effectiveSummary = profile?.summary || sourceResumeData?.summary || "Not provided"
-    const effectiveSkills = (profile?.skills?.length > 0 ? profile.skills : sourceResumeData?.skills) || []
-    const effectiveExperience = (profile?.experience?.length > 0 ? profile.experience : sourceResumeData?.experience) || []
-    const effectiveEducation = (profile?.education?.length > 0 ? profile.education : sourceResumeData?.education) || []
+  // Merge profile with source resume data (profile takes precedence)
+  // SECURITY: Sanitize free-form text fields to prevent prompt injection
+  const effectiveName = profile?.full_name || sourceResumeData?.full_name || "Not provided"
+  const effectiveLocation = profile?.location || sourceResumeData?.location || "Not provided"
+  const rawSummary = profile?.summary || sourceResumeData?.summary || "Not provided"
+  const effectiveSummary = sanitizeInput(rawSummary) // Prevent prompt injection via summary field
+  const effectiveSkills = (profile?.skills?.length > 0 ? profile.skills : sourceResumeData?.skills) || []
+  const effectiveExperience = (profile?.experience?.length > 0 ? profile.experience : sourceResumeData?.experience) || []
+  const effectiveEducation = (profile?.education?.length > 0 ? profile.education : sourceResumeData?.education) || []
 
     const profileContext = `
 CANDIDATE PROFILE:
