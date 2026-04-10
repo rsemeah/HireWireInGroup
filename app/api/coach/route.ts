@@ -54,7 +54,6 @@ SAFETY RULES:
 - Encourage authentic self-presentation`
 
 export async function POST(req: NextRequest) {
-  console.log("[v0] Coach API POST called")
   try {
     const supabase = await createClient()
     
@@ -71,11 +70,6 @@ export async function POST(req: NextRequest) {
     const adminClient = createAdminClient()
 
     const body = await req.json()
-    console.log("[v0] Coach API body parsed:", { 
-      messageCount: body.messages?.length, 
-      mode: body.mode,
-      hasGapContext: !!body.gapContext 
-    })
     const { messages, mode, gapContext } = body
 
     // Safety check on user's latest message
