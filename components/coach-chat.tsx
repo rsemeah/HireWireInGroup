@@ -251,6 +251,16 @@ export function CoachChat({ className, conversationId, compact = false, onClose,
               </div>
             </div>
           )}
+          
+          {/* Error display */}
+          {error && (
+            <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg mt-4">
+              <div className="text-sm text-red-700">
+                <p className="font-medium">Coach Error</p>
+                <p className="text-red-600">{error.message || "Failed to get response. Please try again."}</p>
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
