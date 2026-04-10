@@ -66,6 +66,8 @@ import {
   inferRoleFromJobTitle,
 } from "@/lib/scoring-weights"
 import { BackButton } from "@/components/back-button"
+import { canAccessScoring } from "@/lib/semantic-gates"
+import { isEvidenceMappingComplete, calculateEvidenceCoverage } from "@/lib/job-workflow"
 
 interface ScoreCategory {
   category: string
@@ -93,6 +95,9 @@ export default function ScoringCenterPage() {
   const [isManualMode, setIsManualMode] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [scoreSaved, setScoreSaved] = useState(false)
+  
+  // Semantic state tracking
+  const [semanticWarnings, setSemanticWarnings] = useState<string[]>([])
 
   useEffect(() => {
     async function loadData() {
@@ -133,6 +138,21 @@ export default function ScoringCenterPage() {
         }
         
         setJob(transformedJob as Job)
+        
+        // Check semantic prerequisites
+        const warnings: string[] = []
+        const accessGate = canAccessScoring(transformedJob as Job)
+        if (accessGate.reason) {
+          warnings.push(accessGate.reason)
+        }
+        if (!isEvidenceMappingComplete(transformedJob as Job)) {
+          warnings.push("Evidence matching not marked complete. Score may be less accurate.")
+        }
+        const coverage = calculateEvidenceCoverage(transformedJob as Job)
+        if (coverage < 30) {
+          warnings.push(`Low evidence coverage (${coverage}%). Consider mapping more evidence.`)
+        }
+        setSemanticWarnings(warnings)
         
         // Auto-detect role from job title
         const inferredRole = inferRoleFromJobTitle(transformedJob.title as string) || transformedJob.role_family || "Other"
@@ -489,6 +509,36 @@ export default function ScoringCenterPage() {
           </div>
         </div>
       </div>
+
+      {/* Semantic Prerequisites Banner */}
+      {semanticWarnings.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium text-amber-900 text-sm">Prerequisites Incomplete</p>
+                <ul className="mt-1 space-y-1">
+                  {semanticWarnings.map((warning, idx) => (
+                    <li key={idx} className="text-sm text-amber-700 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 bg-amber-400 rounded-full flex-shrink-0" />
+                      {warning}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex gap-2">
+                  <Link href={`/jobs/${jobId}/evidence-match`}>
+                    <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-100">
+                      <ArrowLeft className="h-3 w-3 mr-1" />
+                      Complete Evidence Matching
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Role-Based Weight Calculator */}
       <Card className="border-primary/20 bg-primary/5">
