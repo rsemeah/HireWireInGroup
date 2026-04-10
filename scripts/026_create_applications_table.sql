@@ -22,7 +22,12 @@ CREATE INDEX IF NOT EXISTS idx_applications_job_id  ON public.applications (job_
 -- Enable Row Level Security
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies
+-- RLS Policies (idempotent - drop if exists first)
+DROP POLICY IF EXISTS "applications_select_own" ON public.applications;
+DROP POLICY IF EXISTS "applications_insert_own" ON public.applications;
+DROP POLICY IF EXISTS "applications_update_own" ON public.applications;
+DROP POLICY IF EXISTS "applications_service_role_all" ON public.applications;
+
 CREATE POLICY "applications_select_own" ON public.applications
   FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "applications_insert_own" ON public.applications
