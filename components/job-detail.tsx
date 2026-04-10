@@ -7,6 +7,7 @@ import type { Job, JobStatus, JobFit, RoleFamily, GenerationStatus } from "@/lib
 import { STATUS_CONFIG, FIT_CONFIG, ROLE_FAMILIES } from "@/lib/types"
 import { normalizeJobStatus } from "@/lib/job-lifecycle"
 import { updateJobStatus } from "@/lib/actions/jobs"
+import { applyToJob } from "@/lib/actions/apply"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -62,6 +63,13 @@ import {
   STAGE_DESCRIPTIONS,
   type WorkflowStage,
 } from "@/lib/job-workflow"
+import { 
+  ResumeWithProvenance, 
+  CoverLetterWithProvenance,
+  type BulletProvenance,
+  type ParagraphProvenance,
+} from "@/components/resume-with-provenance"
+import { type ReadinessResult } from "@/lib/readiness"
 
 // Available status transitions
 const STATUS_OPTIONS: JobStatus[] = [
@@ -82,6 +90,7 @@ const STATUS_OPTIONS: JobStatus[] = [
 
 interface JobDetailProps {
   job: Job
+  readiness?: ReadinessResult | null
 }
 
 // Fit badge component with proper styling and explainable tooltip
@@ -304,7 +313,7 @@ function GenerationStatusBanner({
   )
 }
 
-export function JobDetail({ job }: JobDetailProps) {
+export function JobDetail({ job, readiness }: JobDetailProps) {
   const router = useRouter()
   const [status, setStatus] = useState<JobStatus>(normalizeJobStatus(job.status))
   const [isPending, startTransition] = useTransition()
@@ -358,10 +367,31 @@ export function JobDetail({ job }: JobDetailProps) {
     loadProfile()
   }, [])
 
-  // Semantic workflow state - derived from persisted artifacts
+  // Semantic workflow state - prefer server-computed readiness, fallback to local derivation
   const workflowState = getWorkflowState(job)
-  const currentStage = workflowState.stage
-  const stageIndex = workflowState.stageIndex
+  // Use readiness from server if available (single source of truth)
+  const currentStage = readiness?.stage || workflowState.stage
+  const stageIndex = readiness?.stage_index ?? workflowState.stageIndex
+  
+  // Gate flags from readiness (server-computed) or fallback
+  const canGenerate = readiness?.can_generate ?? workflowState.canGenerate
+  const canInterviewPrep = readiness?.can_interview_prep ?? (!!job.generated_resume && !!job.generated_cover_letter)
+  const canApply = readiness?.can_apply ?? false
+  const reasonsNotReady = readiness?.reasons_not_ready || workflowState.blockers
+  
+  // State for provenance display
+  const [showProvenance, setShowProvenance] = useState(false)
+  
+  // Extract provenance data from evidence_map if available
+  const evidenceMapData = job.evidence_map as {
+    bullet_provenance?: BulletProvenance[]
+    paragraph_provenance?: ParagraphProvenance[]
+    selected_evidence_ids?: string[]
+    blocked_evidence?: { id: string; title: string; reason: string }[]
+  } | null
+  
+  const bulletProvenance = evidenceMapData?.bullet_provenance || []
+  const paragraphProvenance = evidenceMapData?.paragraph_provenance || []
 
   // Computed states
   const hasResume = !!job.generated_resume
@@ -400,10 +430,19 @@ export function JobDetail({ job }: JobDetailProps) {
       const { createClient } = await import("@/lib/supabase/client")
       const supabase = createClient()
       
-      // Load user evidence and profile
+      // Get current user for tenant isolation
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error("You must be logged in to generate materials")
+        setIsLoadingGaps(false)
+        return
+      }
+      
+      // Load user evidence and profile - EXPLICITLY filter by user_id for defense-in-depth
+      // RLS policies should enforce this, but explicit filtering is safer
       const [evidenceResult, profileResult] = await Promise.all([
-        supabase.from("evidence_library").select("*").eq("is_active", true),
-        supabase.from("user_profile").select("*").limit(1).maybeSingle()
+        supabase.from("evidence_library").select("*").eq("user_id", user.id).eq("is_active", true),
+        supabase.from("user_profile").select("*").eq("user_id", user.id).maybeSingle()
       ])
       
       const evidence = evidenceResult.data || []
@@ -424,6 +463,7 @@ export function JobDetail({ job }: JobDetailProps) {
         profile ? {
           skills: profile.skills || [],
           experience: profile.experience || [],
+          education: profile.education || [],
         } : null,
         job.score_gaps || []
       )
@@ -571,19 +611,43 @@ export function JobDetail({ job }: JobDetailProps) {
     }
   }
 
-  const handleApplyNow = () => {
+  const handleApplyNow = async () => {
+    // Gate check: must have quality passed (Red Team approval)
+    if (!canApply) {
+      toast.error("Cannot apply yet", {
+        description: reasonsNotReady.length > 0 
+          ? reasonsNotReady[0] 
+          : "Complete Red Team review before applying"
+      })
+      return
+    }
+    
+    // Copy resume to clipboard
     if (job.generated_resume) {
       navigator.clipboard.writeText(job.generated_resume)
       toast.success("Resume copied to clipboard!")
     }
+    
+    // Open job posting
     if (job.source_url) {
       window.open(job.source_url, "_blank")
     }
+    
+    // Prompt user to confirm application
     setTimeout(() => {
       toast.info("Mark as applied when done", {
         action: {
           label: "Mark Applied",
-          onClick: () => handleStatusChange("applied"),
+          onClick: async () => {
+            const result = await applyToJob(job.id, "manual")
+            if (result.success) {
+              toast.success("Marked as applied!")
+              setStatus("applied")
+              router.refresh()
+            } else {
+              toast.error(result.error || "Failed to mark as applied")
+            }
+          },
         },
       })
     }, 1000)
@@ -696,14 +760,14 @@ export function JobDetail({ job }: JobDetailProps) {
           )}
           
           {/* Blockers */}
-          {workflowState.blockers.length > 0 && (
+          {reasonsNotReady.length > 0 && (
             <div className="mt-3 pt-3 border-t">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                 <div className="text-sm">
                   <span className="font-medium text-amber-600">Attention needed:</span>
                   <ul className="mt-1 space-y-0.5">
-                    {workflowState.blockers.map((blocker, idx) => (
+                    {reasonsNotReady.map((blocker, idx) => (
                       <li key={idx} className="text-muted-foreground">{blocker}</li>
                     ))}
                   </ul>
@@ -991,7 +1055,7 @@ export function JobDetail({ job }: JobDetailProps) {
               <Save className="mr-2 h-4 w-4" />
               Save for Later
             </Button>
-            {hasResume && (
+            {hasResume && canGenerate && (
               <Button variant="outline" onClick={() => handleGenerateMaterials()} disabled={isGenerating}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Regenerate
@@ -1430,11 +1494,12 @@ export function JobDetail({ job }: JobDetailProps) {
                 </div>
               </CardHeader>
               <CardContent>
-                <ScrollArea className="h-[500px] pr-4">
-                  <pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-4 rounded-lg">
-                    {job.generated_resume}
-                  </pre>
-                </ScrollArea>
+                <ResumeWithProvenance
+                  resumeText={job.generated_resume || ""}
+                  bulletProvenance={bulletProvenance}
+                  showProvenance={showProvenance}
+                  onToggleProvenance={setShowProvenance}
+                />
               </CardContent>
             </Card>
           ) : (
@@ -1478,13 +1543,14 @@ export function JobDetail({ job }: JobDetailProps) {
               </div>
             </CardHeader>
             <CardContent>
-              {hasCoverLetter ? (
-                <ScrollArea className="h-[500px] pr-4">
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                    {job.generated_cover_letter}
-                  </div>
-                </ScrollArea>
-              ) : (
+          {hasCoverLetter ? (
+          <CoverLetterWithProvenance
+            coverLetterText={job.generated_cover_letter || ""}
+            paragraphProvenance={paragraphProvenance}
+            showProvenance={showProvenance}
+            onToggleProvenance={setShowProvenance}
+          />
+          ) : (
                 <div className="text-center py-8">
                   <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                   <p className="text-muted-foreground">No cover letter generated yet</p>

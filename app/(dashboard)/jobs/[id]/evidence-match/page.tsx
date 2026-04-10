@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import { trackEvent } from "@/components/posthog-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,6 +28,8 @@ import {
   Sparkles,
   Info,
   Search,
+  RefreshCw,
+  FileCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
@@ -35,13 +38,23 @@ import { canCompleteMatching } from "@/lib/semantic-gates"
 import { isEvidenceMappingComplete } from "@/lib/job-workflow"
 
 // TRUST FIX: Renamed from "Match" to "KeywordMatch" to be honest about what this is
+// UX FIDELITY: Using 5-tier confidence model for smarter, fairer qualification assessment
+type MatchConfidence = 
+  | "satisfied"               // Direct evidence with high confidence
+  | "likely_satisfied"        // Strong keyword overlap  
+  | "equivalent_experience"   // Transferable experience applies
+  | "ambiguous"               // Needs review/clarification
+  | "not_found"               // No evidence found
+
 interface RequirementKeywordMatch {
   requirement: string
   type: "required" | "preferred"
   matchedEvidence: EvidenceRecord[]
   matchedKeywords: string[] // TRUST FIX: Show which keywords actually matched
   matchScore: number
-  status: "keyword_match" | "weak_match" | "no_match" // TRUST FIX: Renamed from strong/partial/gap
+  status: MatchConfidence // UX FIDELITY: 5-tier confidence model
+  isEducation?: boolean   // UX FIDELITY: Flag for education requirements
+  confidenceReason?: string // UX FIDELITY: Explain why this classification
 }
 
 export default function EvidenceMatchPage() {
@@ -56,6 +69,8 @@ export default function EvidenceMatchPage() {
   const [requirementMatches, setRequirementMatches] = useState<RequirementKeywordMatch[]>([])
   const [selectedEvidence, setSelectedEvidence] = useState<Set<string>>(new Set())
   const [matchingMarkedComplete, setMatchingMarkedComplete] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
 
   // Load job and evidence data
   useEffect(() => {
@@ -130,16 +145,41 @@ export default function EvidenceMatchPage() {
     const required = job.qualifications_required || []
     for (const req of required) {
       const { matched, keywords } = findMatchingEvidenceWithKeywords(req, evidence)
+      const isEducation = isEducationRequirement(req)
+      
+      // UX FIDELITY: Use 5-tier confidence model
+      let status: MatchConfidence
+      let confidenceReason: string | undefined
+      
+      if (matched.length > 0) {
+        if (matched.some(e => e.confidence_level === "high")) {
+          status = "satisfied"
+          confidenceReason = "Strong evidence directly supports this requirement"
+        } else if (matched.some(e => e.confidence_level === "medium")) {
+          status = "likely_satisfied"
+          confidenceReason = "Good evidence found - verify manually"
+        } else {
+          status = "ambiguous"
+          confidenceReason = "Some evidence found but may need clarification"
+        }
+      } else if (isEducation) {
+        // Special handling for education - check if user might have equivalent
+        status = "ambiguous"
+        confidenceReason = "Education requirement - check profile for qualifying credentials"
+      } else {
+        status = "not_found"
+        confidenceReason = "No matching evidence in library"
+      }
+      
       matches.push({
         requirement: req,
         type: "required",
         matchedEvidence: matched,
         matchedKeywords: keywords,
         matchScore: calculateMatchScore(matched),
-        // TRUST FIX: Renamed statuses to be honest about what they mean
-        status: matched.length > 0 
-          ? (matched.some(e => e.confidence_level === "high") ? "keyword_match" : "weak_match") 
-          : "no_match",
+        status,
+        isEducation,
+        confidenceReason,
       })
     }
     
@@ -147,15 +187,35 @@ export default function EvidenceMatchPage() {
     const preferred = job.qualifications_preferred || []
     for (const pref of preferred) {
       const { matched, keywords } = findMatchingEvidenceWithKeywords(pref, evidence)
+      const isEducation = isEducationRequirement(pref)
+      
+      let status: MatchConfidence
+      let confidenceReason: string | undefined
+      
+      if (matched.length > 0) {
+        if (matched.some(e => e.confidence_level === "high")) {
+          status = "satisfied"
+          confidenceReason = "Strong evidence directly supports this"
+        } else {
+          status = "likely_satisfied"
+          confidenceReason = "Evidence found - nice to have"
+        }
+      } else {
+        status = isEducation ? "ambiguous" : "not_found"
+        confidenceReason = isEducation 
+          ? "Preferred education - may have equivalent" 
+          : "No evidence but this is preferred, not required"
+      }
+      
       matches.push({
         requirement: pref,
         type: "preferred",
         matchedEvidence: matched,
         matchedKeywords: keywords,
         matchScore: calculateMatchScore(matched),
-        status: matched.length > 0 
-          ? (matched.some(e => e.confidence_level === "high") ? "keyword_match" : "weak_match") 
-          : "no_match",
+        status,
+        isEducation,
+        confidenceReason,
       })
     }
     
@@ -172,6 +232,17 @@ export default function EvidenceMatchPage() {
     })
     setSelectedEvidence(preSelected)
   }, [job, evidence])
+
+  // UX FIDELITY: Detect education requirements for special handling
+  function isEducationRequirement(requirement: string): boolean {
+    const eduKeywords = [
+      "degree", "bachelor", "master", "phd", "doctorate", "diploma",
+      "certification", "certified", "accredited", "education",
+      "b.s.", "b.a.", "m.s.", "m.a.", "mba", "bs", "ba", "ms", "ma",
+    ]
+    const reqLower = requirement.toLowerCase()
+    return eduKeywords.some(kw => reqLower.includes(kw))
+  }
 
   // TRUST FIX: Now returns which keywords actually matched
   function findMatchingEvidenceWithKeywords(
@@ -297,6 +368,7 @@ export default function EvidenceMatchPage() {
     if (markComplete) {
       evidenceMap.matching_complete = true
       evidenceMap.completed_at = new Date().toISOString()
+      evidenceMap.version = "1.0" // Schema version for forward compatibility
     }
     
     // Update job - filtered by user_id for security
@@ -304,6 +376,7 @@ export default function EvidenceMatchPage() {
       .from("jobs")
       .update({ 
         evidence_map: evidenceMap,
+        evidence_map_version: markComplete ? "1.0" : null, // Track schema version at job level
         status: markComplete ? "analyzed" : job.status
       })
       .eq("id", jobId)
@@ -314,8 +387,21 @@ export default function EvidenceMatchPage() {
     } else {
       if (markComplete) {
         setMatchingMarkedComplete(true)
-        toast.success("Evidence mapping complete! Proceeding to scoring...")
-        router.push(`/jobs/${jobId}/scoring`)
+        toast.success("Evidence mapping complete! You can now generate your materials below.")
+        
+        // Track funnel event: evidence_match_completed
+        const matchedCount = Object.values(evidenceMap).filter(v => Array.isArray(v) && v.length > 0).length
+        trackEvent.evidenceMatchCompleted({
+          job_id: jobId,
+          requirements_matched: matchedCount,
+          total_requirements: requirements.length,
+        })
+        
+        // Don't redirect - let user generate from this page
+        // Scroll to the generate section
+        setTimeout(() => {
+          document.querySelector('[data-generate-section]')?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
       } else {
         toast.success("Evidence map saved (draft)")
       }
@@ -324,9 +410,59 @@ export default function EvidenceMatchPage() {
     setSaving(false)
   }
 
+  // Handle materials generation directly from evidence match page
+  async function handleGenerateMaterials() {
+    if (!matchingMarkedComplete) {
+      toast.error("Please mark evidence matching as complete first")
+      return
+    }
+    
+    setIsGenerating(true)
+    setGenerationError(null)
+    
+    try {
+      const response = await fetch("/api/generate-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          job_id: jobId,
+          selected_evidence_ids: Array.from(selectedEvidence)
+        }),
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success("Materials generated successfully!")
+        
+        // Track funnel event: documents_generated
+        trackEvent.documentsGenerated({
+          job_id: jobId,
+          resume_generated: !!data.generated_resume,
+          cover_letter_generated: !!data.generated_cover_letter,
+        })
+        
+        // Navigate to job detail to see results
+        router.push(`/jobs/${jobId}`)
+      } else {
+        const errorMsg = data.user_message || data.error || "Generation failed"
+        setGenerationError(errorMsg)
+        toast.error(errorMsg)
+      }
+    } catch (error) {
+      console.error("Generation error:", error)
+      setGenerationError("Failed to generate materials. Please try again.")
+      toast.error("Failed to generate materials")
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   // Calculate overall coverage
   const requiredMatches = requirementMatches.filter(m => m.type === "required")
-  const requiredCovered = requiredMatches.filter(m => m.status !== "no_match").length
+  // UX FIDELITY: Count satisfied + likely + equivalent as "covered"
+  const requiredCovered = requiredMatches.filter(m => 
+    m.status === "satisfied" || m.status === "likely_satisfied" || m.status === "equivalent_experience"
+  ).length
   const requiredTotal = requiredMatches.length
   const overlapPercent = requiredTotal > 0 ? Math.round((requiredCovered / requiredTotal) * 100) : 0
 
@@ -491,22 +627,27 @@ export default function EvidenceMatchPage() {
               </div>
             </div>
             
-            {/* TRUST FIX: Renamed status labels */}
-            <div className="flex gap-4 mt-4 text-sm">
-              <div className="flex items-center gap-2">
+            {/* UX FIDELITY: 5-tier confidence summary */}
+            <div className="flex flex-wrap gap-3 mt-4 text-sm">
+              <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
-                {/* TRUST FIX: Renamed from "Strong" */}
-                <span>{requirementMatches.filter(m => m.status === "keyword_match").length} Keyword Matches</span>
+                <span>{requirementMatches.filter(m => m.status === "satisfied").length} Confirmed</span>
               </div>
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                {/* TRUST FIX: Renamed from "Partial" */}
-                <span>{requirementMatches.filter(m => m.status === "weak_match").length} Weak Matches</span>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                <span>{requirementMatches.filter(m => m.status === "likely_satisfied").length} Likely</span>
               </div>
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-500" />
-                {/* TRUST FIX: Renamed from "Gap" */}
-                <span>{requirementMatches.filter(m => m.status === "no_match").length} No Matches</span>
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                <span>{requirementMatches.filter(m => m.status === "equivalent_experience").length} Equivalent</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span>{requirementMatches.filter(m => m.status === "ambiguous").length} Review</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <XCircle className="h-4 w-4 text-gray-400" />
+                <span>{requirementMatches.filter(m => m.status === "not_found").length} Not Found</span>
               </div>
             </div>
 
@@ -573,6 +714,65 @@ export default function EvidenceMatchPage() {
               />
             ))
           )}
+          
+          {/* Next Step: Generate Materials - Only show when matching is complete */}
+          <Separator className="my-6" />
+          
+          <Card 
+            data-generate-section
+            className={matchingMarkedComplete ? "border-green-200 bg-green-50/50" : "border-dashed bg-muted/30"}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileCheck className="h-5 w-5" />
+                Next Step: Generate Materials
+              </CardTitle>
+              <CardDescription>
+                {matchingMarkedComplete 
+                  ? "Your evidence matching is complete. Generate your tailored resume and cover letter."
+                  : "Complete evidence matching above to unlock generation."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {generationError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {generationError}
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={handleGenerateMaterials}
+                  disabled={!matchingMarkedComplete || isGenerating}
+                  className="flex-1"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Generate Resume & Cover Letter
+                    </>
+                  )}
+                </Button>
+                {matchingMarkedComplete && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => router.push(`/jobs/${jobId}`)}
+                  >
+                    Choose Template First
+                  </Button>
+                )}
+              </div>
+              {!matchingMarkedComplete && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  Click &quot;Complete & Continue&quot; above after reviewing your evidence matches.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </TooltipProvider>
@@ -588,29 +788,46 @@ function RequirementCard({
   selectedEvidence: Set<string>
   onToggleEvidence: (id: string) => void
 }) {
-  // TRUST FIX: Renamed status config
-  const statusConfig = {
-    keyword_match: {
+  // UX FIDELITY: 5-tier confidence model for smarter, fairer assessment
+  const statusConfig: Record<MatchConfidence, { 
+    icon: React.ReactNode
+    bg: string
+    label: string
+    labelColor: string 
+  }> = {
+    satisfied: {
       icon: <CheckCircle2 className="h-5 w-5 text-green-500" />,
       bg: "border-green-200 bg-green-50/50",
-      label: "Keyword Match Found",
+      label: "Confirmed",
       labelColor: "text-green-700",
     },
-    weak_match: {
-      icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-      bg: "border-yellow-200 bg-yellow-50/50",
-      label: "Weak Match (Low Confidence)",
-      labelColor: "text-yellow-700",
+    likely_satisfied: {
+      icon: <CheckCircle2 className="h-5 w-5 text-blue-500" />,
+      bg: "border-blue-200 bg-blue-50/50",
+      label: "Likely Match",
+      labelColor: "text-blue-700",
     },
-    no_match: {
-      icon: <XCircle className="h-5 w-5 text-red-500" />,
-      bg: "border-red-200 bg-red-50/50",
-      label: "No Keywords Matched",
-      labelColor: "text-red-700",
+    equivalent_experience: {
+      icon: <Sparkles className="h-5 w-5 text-purple-500" />,
+      bg: "border-purple-200 bg-purple-50/50",
+      label: "Equivalent Experience",
+      labelColor: "text-purple-700",
+    },
+    ambiguous: {
+      icon: <AlertTriangle className="h-5 w-5 text-amber-500" />,
+      bg: "border-amber-200 bg-amber-50/50",
+      label: "Needs Review",
+      labelColor: "text-amber-700",
+    },
+    not_found: {
+      icon: <XCircle className="h-5 w-5 text-gray-400" />,
+      bg: "border-gray-200 bg-gray-50/50",
+      label: "Not Found",
+      labelColor: "text-gray-600",
     },
   }
 
-  const config = statusConfig[match.status]
+  const config = statusConfig[match.status] || statusConfig.not_found
 
   return (
     <Card className={`${config.bg} border`}>
@@ -622,8 +839,18 @@ function RequirementCard({
               {config.icon}
               <div className="flex-1">
                 <p className="font-medium">{match.requirement}</p>
-                {/* TRUST FIX: Show honest status label */}
-                <p className={`text-xs mt-1 ${config.labelColor}`}>{config.label}</p>
+                {/* UX FIDELITY: Show confidence label with reason */}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-xs font-medium ${config.labelColor}`}>{config.label}</span>
+                  {match.isEducation && (
+                    <Badge variant="outline" className="text-xs py-0 px-1.5 border-purple-300 text-purple-600">
+                      Education
+                    </Badge>
+                  )}
+                </div>
+                {match.confidenceReason && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{match.confidenceReason}</p>
+                )}
               </div>
             </div>
             

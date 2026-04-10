@@ -6,6 +6,14 @@
  */
 
 import type { EvidenceRecord, Job } from "./types"
+import {
+  isEducationRequirement,
+  extractDegreeLevel,
+  meetsOrExceedsDegreeRequirement,
+  extractUserDegrees,
+  canExperienceSubstitute,
+  type DegreeLevel,
+} from "./education-normalization"
 
 // ============================================================================
 // TYPES
@@ -22,11 +30,21 @@ export type GapCategory =
   | "ownership_unclear"       // Unclear if user led or participated
   | "domain_gap"              // Industry/domain experience gap
   | "seniority_mismatch"      // Experience level doesn't match
+  | "education"               // Education/degree requirement
+
+// Classification result for detected gaps (5-tier model)
+export type GapClassification =
+  | "satisfied"               // Evidence directly supports this requirement
+  | "likely_satisfied"        // Strong evidence, high confidence
+  | "equivalent_experience"   // Transferable/equivalent experience found
+  | "ambiguous"               // Needs clarification from user
+  | "missing"                 // No evidence found
 
 export interface DetectedGap {
   id: string
   category: GapCategory
   severity: GapSeverity
+  classification: GapClassification   // 5-tier classification result
   requirement: string                 // The job requirement
   requirement_source: string          // Where in job posting this came from
   current_evidence: string | null     // What evidence exists (if any)
@@ -68,10 +86,13 @@ export function detectGaps(
   evidenceLibrary: EvidenceRecord[],
   userProfile: {
     skills?: string[]
+    education?: Array<{ degree?: string; field?: string }>
     experience?: Array<{
       title?: string
       company?: string
       bullets?: string[]
+      start_date?: string
+      end_date?: string
     }>
   } | null,
   existingGaps?: string[]
@@ -82,10 +103,45 @@ export function detectGaps(
   // Collect all evidence text for matching
   const allEvidenceText = collectEvidenceText(evidenceLibrary, userProfile)
   const allSkills = collectSkills(evidenceLibrary, userProfile)
+  
+  // Extract user's education degrees for education requirement matching
+  const userDegrees = extractUserDegrees(userProfile?.education || null)
+  
+  // Calculate years of experience for equivalency checks
+  const yearsExperience = calculateYearsExperience(userProfile?.experience || [])
 
   // 1. Check required qualifications
   const requiredQuals = jobAnalysis.qualifications_required || []
   for (const requirement of requiredQuals) {
+    // EDUCATION REQUIREMENT HANDLING
+    if (isEducationRequirement(requirement)) {
+      const eduAssessment = assessEducationCoverage(
+        requirement, 
+        userDegrees, 
+        yearsExperience,
+        evidenceLibrary
+      )
+      
+      // Only add as a gap if not satisfied
+      if (eduAssessment.classification !== "satisfied" && eduAssessment.classification !== "likely_satisfied") {
+        gaps.push({
+          id: `detect-gap-${gapIndex++}`,
+          category: "education",
+          severity: eduAssessment.classification === "equivalent_experience" ? "important" : "critical",
+          classification: eduAssessment.classification,
+          requirement,
+          requirement_source: "Required Qualifications",
+          current_evidence: eduAssessment.matchedEvidence,
+          gap_description: eduAssessment.description,
+          coach_question: generateEducationCoachQuestion(requirement, eduAssessment),
+          can_proceed_without: eduAssessment.classification === "equivalent_experience",
+          suggested_action: eduAssessment.classification === "equivalent_experience" ? "clarify" : "add_evidence",
+        })
+      }
+      continue // Skip regular processing for education requirements
+    }
+    
+    // REGULAR REQUIREMENT HANDLING
     const coverage = assessRequirementCoverage(requirement, allEvidenceText, allSkills)
     
     if (coverage.level === "none" || coverage.level === "weak") {
@@ -93,6 +149,7 @@ export function detectGaps(
         id: `detect-gap-${gapIndex++}`,
         category: categorizeGap(requirement),
         severity: "critical",
+        classification: coverage.level === "none" ? "missing" : "ambiguous",
         requirement,
         requirement_source: "Required Qualifications",
         current_evidence: coverage.matchedEvidence,
@@ -119,6 +176,7 @@ export function detectGaps(
         id: `detect-gap-${gapIndex++}`,
         category: "missing_tool",
         severity: techStack.indexOf(tech) < 3 ? "critical" : "important",
+        classification: "missing",
         requirement: tech,
         requirement_source: "Tech Stack",
         current_evidence: null,
@@ -139,6 +197,7 @@ export function detectGaps(
           id: `detect-gap-${gapIndex++}`,
           category: "missing_metric",
           severity: "important",
+          classification: "ambiguous",
           requirement: "Quantified achievement",
           requirement_source: "Your Evidence",
           current_evidence: evidence.achievement || evidence.title,
@@ -160,6 +219,7 @@ export function detectGaps(
           id: `detect-gap-${gapIndex++}`,
           category: categorizeGap(gapText),
           severity: "important",
+          classification: "ambiguous",
           requirement: gapText,
           requirement_source: "Job Analysis",
           current_evidence: null,
@@ -393,4 +453,172 @@ function isEvidenceRelevantToJob(
 function truncate(text: string, length: number): string {
   if (text.length <= length) return text
   return text.slice(0, length - 3) + "..."
+}
+
+// ============================================================================
+// EDUCATION ASSESSMENT
+// ============================================================================
+
+interface EducationAssessment {
+  classification: GapClassification
+  matchedEvidence: string | null
+  description: string
+  requiredDegree: DegreeLevel | null
+}
+
+/**
+ * Assess if user's education meets a requirement
+ */
+function assessEducationCoverage(
+  requirement: string,
+  userDegrees: DegreeLevel[],
+  yearsExperience: number,
+  evidenceLibrary: EvidenceRecord[]
+): EducationAssessment {
+  const requiredDegree = extractDegreeLevel(requirement)
+  const reqLower = requirement.toLowerCase()
+  
+  // Check education evidence in library
+  const educationEvidence = evidenceLibrary.filter(e => e.source_type === "education")
+  const educationText = educationEvidence.map(e => e.source_title || e.role_name).join(", ")
+  
+  // Case 1: User has qualifying degree from profile
+  // If user has Bachelor's and job requires Bachelor's (or lower), it's satisfied
+  if (requiredDegree && userDegrees.length > 0) {
+    if (meetsOrExceedsDegreeRequirement(userDegrees, requiredDegree)) {
+      const userHighest = userDegrees[0] // Already sorted by highest
+      const matchDesc = userHighest === requiredDegree 
+        ? `You have the required ${requiredDegree}'s degree`
+        : `Your ${userHighest}'s degree exceeds the ${requiredDegree}'s requirement`
+      return {
+        classification: "satisfied",
+        matchedEvidence: educationText || userDegrees.join(", "),
+        description: matchDesc,
+        requiredDegree,
+      }
+    }
+  }
+  
+  // Case 2: Check if requirement mentions experience as acceptable alternative
+  // Patterns: "or equivalent experience", "or X years", "degree or experience"
+  const acceptsExperience = 
+    reqLower.includes("or equivalent") ||
+    reqLower.includes("or experience") ||
+    reqLower.includes("years of experience") ||
+    /or \d+ years/i.test(requirement) ||
+    /\d+\+ years/i.test(requirement)
+  
+  if (acceptsExperience && yearsExperience > 0) {
+    const substitution = canExperienceSubstitute(yearsExperience, requiredDegree || "bachelor")
+    if (substitution.canSubstitute) {
+      return {
+        classification: substitution.confidence === "high" ? "satisfied" : "equivalent_experience",
+        matchedEvidence: `${yearsExperience} years of professional experience`,
+        description: `Your ${yearsExperience} years of experience ${substitution.confidence === "high" ? "satisfies" : "may satisfy"} this requirement`,
+        requiredDegree,
+      }
+    }
+  }
+  
+  // Case 3: Has education evidence in library that might match (keyword overlap)
+  if (educationEvidence.length > 0) {
+    const evidenceMatches = educationEvidence.some(e => {
+      const text = `${e.source_title} ${e.role_name}`.toLowerCase()
+      return reqLower.split(" ").some(word => word.length > 4 && text.includes(word))
+    })
+    
+    if (evidenceMatches) {
+      return {
+        classification: "likely_satisfied",
+        matchedEvidence: educationText,
+        description: `Education evidence found: ${educationText}`,
+        requiredDegree,
+      }
+    }
+  }
+  
+  // Case 4: No degree but significant experience (8+ years often accepted as equivalent)
+  if (yearsExperience >= 8 && (!requiredDegree || requiredDegree === "bachelor")) {
+    return {
+      classification: "equivalent_experience",
+      matchedEvidence: `${yearsExperience} years of professional experience`,
+      description: `Your extensive experience (${yearsExperience} years) demonstrates equivalent competency`,
+      requiredDegree,
+    }
+  }
+  
+  // Case 5: User has a degree but it doesn't match requirement level
+  if (userDegrees.length > 0 && requiredDegree) {
+    return {
+      classification: "ambiguous",
+      matchedEvidence: userDegrees.join(", "),
+      description: `You have ${userDegrees.join(", ")} - confirm if this satisfies "${requirement}"`,
+      requiredDegree,
+    }
+  }
+  
+  // Case 6: Has some education evidence but unclear match
+  if (educationEvidence.length > 0) {
+    return {
+      classification: "ambiguous",
+      matchedEvidence: educationText,
+      description: `Education on file (${educationText}) - verify if it meets this requirement`,
+      requiredDegree,
+    }
+  }
+  
+  // Case 7: Missing - no education evidence at all
+  return {
+    classification: "missing",
+    matchedEvidence: null,
+    description: `No education evidence found for: ${requirement}`,
+    requiredDegree,
+  }
+}
+
+/**
+ * Generate a semantically correct coach question for education gaps
+ */
+function generateEducationCoachQuestion(
+  requirement: string,
+  assessment: EducationAssessment
+): string {
+  if (assessment.classification === "equivalent_experience") {
+    return `The role mentions "${requirement}". Your ${assessment.matchedEvidence} may satisfy this requirement. Would you like me to help document how your experience demonstrates equivalent competency?`
+  }
+  
+  if (assessment.classification === "ambiguous") {
+    return `I see you have education on file (${assessment.matchedEvidence}). Does this background cover what the role is asking for with "${requirement}"? If so, I can help strengthen how it's presented.`
+  }
+  
+  // For missing education
+  return `The role requires "${requirement}". Do you have any formal education, certifications, or equivalent professional experience that covers this? Many roles accept relevant work experience in place of a formal degree.`
+}
+
+/**
+ * Calculate total years of experience from user's experience array
+ */
+function calculateYearsExperience(
+  experience: Array<{ start_date?: string; end_date?: string }> | null
+): number {
+  if (!experience || !Array.isArray(experience) || experience.length === 0) {
+    return 0
+  }
+  
+  let totalMonths = 0
+  const now = new Date()
+  
+  for (const exp of experience) {
+    if (!exp.start_date) continue
+    
+    const start = new Date(exp.start_date)
+    const end = exp.end_date ? new Date(exp.end_date) : now
+    
+    if (isNaN(start.getTime())) continue
+    
+    const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth())
+    totalMonths += Math.max(0, months)
+  }
+  
+  return Math.round(totalMonths / 12)
 }

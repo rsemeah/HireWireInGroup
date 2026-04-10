@@ -495,23 +495,67 @@ export default function ScoringCenterPage() {
   const weightsSum = weights.experience_relevance + weights.evidence_quality + weights.skills_match + weights.seniority_alignment + weights.ats_keywords
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-4xl mx-auto">
+      {/* Simplified Mobile-First Header */}
+      <div className="flex flex-col gap-4">
+        {/* Navigation row */}
+        <div className="flex items-center justify-between">
           <BackButton fallbackHref={`/jobs/${jobId}`} />
-          <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <Target className="h-6 w-6 text-primary" />
-              Scoring Center
-            </h1>
-            <p className="text-muted-foreground">{job.role_title || job.title} at {job.company_name || job.company}</p>
+          {scoreSaved && (
+            <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Saved
+            </Badge>
+          )}
+        </div>
+        
+        {/* Step Progress - Clear workflow indicator */}
+        <div className="flex items-center justify-center gap-1 text-xs">
+          <Link href={`/jobs/${jobId}/evidence-match`} className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700">
+            <CheckCircle className="h-3 w-3" />
+            <span>Match</span>
+          </Link>
+          <div className="w-4 h-0.5 bg-primary" />
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary text-primary-foreground">
+            <span className="font-medium">2</span>
+            <span>Score</span>
           </div>
+          <div className="w-4 h-0.5 bg-muted" />
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-muted text-muted-foreground">
+            <span className="font-medium">3</span>
+            <span>Generate</span>
+          </div>
+        </div>
+        
+        {/* Title */}
+        <div className="text-center">
+          <h1 className="text-xl font-semibold">Fit Scoring</h1>
+          <p className="text-sm text-muted-foreground">{job.role_title || job.title} at {job.company_name || job.company}</p>
         </div>
       </div>
 
-      {/* Semantic Prerequisites Banner */}
+      {/* Semantic Prerequisites Banner - Simplified */}
       {semanticWarnings.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm text-amber-700">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>Complete evidence matching first for accurate scoring</span>
+              </div>
+              <Link href={`/jobs/${jobId}/evidence-match`}>
+                <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-100 whitespace-nowrap">
+                  <ArrowLeft className="h-3 w-3 mr-1" />
+                  Fix
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Hidden original banner content for reference */}
+      {false && semanticWarnings.length > 0 && (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -539,167 +583,6 @@ export default function ScoringCenterPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Role-Based Weight Calculator */}
-      <Card className="border-primary/20 bg-primary/5">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Wand2 className="h-5 w-5 text-primary" />
-              Calculate Automatically Based on Role
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              {isManualMode && (
-                <Badge variant="outline" className="text-xs">Manual Mode</Badge>
-              )}
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={handleResetWeights}
-                className="text-muted-foreground"
-              >
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Reset
-              </Button>
-            </div>
-          </div>
-          <CardDescription>
-            Select a role to automatically apply optimized scoring weights, or adjust manually.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">Target Role</label>
-              <Select value={selectedRole} onValueChange={handleRoleChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {getAvailableRoles().map((role) => (
-                    <SelectItem key={role} value={role}>{role}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="pt-6">
-              <Button onClick={handleAutoCalculate} className="gap-2">
-                <Wand2 className="h-4 w-4" />
-                Apply Role Weights
-              </Button>
-            </div>
-          </div>
-          
-          <p className="text-sm text-muted-foreground">
-            {getRoleProfileDescription(selectedRole)}
-          </p>
-
-          {/* Weight Sliders */}
-          <div className="space-y-4 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium flex items-center gap-2">
-                <Settings2 className="h-4 w-4" />
-                Weight Configuration
-              </span>
-              <Badge variant={weightsSum === 100 ? "default" : "destructive"} className="text-xs">
-                Total: {weightsSum}%
-              </Badge>
-            </div>
-            
-            <div className="grid gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <Briefcase className="h-4 w-4 text-purple-500" />
-                    Experience Relevance
-                  </span>
-                  <span className="font-medium">{weights.experience_relevance}%</span>
-                </div>
-                <Slider
-                  value={[weights.experience_relevance]}
-                  onValueChange={([v]) => handleWeightChange("experience_relevance", v)}
-                  max={60}
-                  min={10}
-                  step={1}
-                  className="[&>span]:bg-purple-500"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-blue-500" />
-                    Evidence Quality
-                  </span>
-                  <span className="font-medium">{weights.evidence_quality}%</span>
-                </div>
-                <Slider
-                  value={[weights.evidence_quality]}
-                  onValueChange={([v]) => handleWeightChange("evidence_quality", v)}
-                  max={40}
-                  min={10}
-                  step={1}
-                  className="[&>span]:bg-blue-500"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <Wrench className="h-4 w-4 text-orange-500" />
-                    Skills Match
-                  </span>
-                  <span className="font-medium">{weights.skills_match}%</span>
-                </div>
-                <Slider
-                  value={[weights.skills_match]}
-                  onValueChange={([v]) => handleWeightChange("skills_match", v)}
-                  max={40}
-                  min={5}
-                  step={1}
-                  className="[&>span]:bg-orange-500"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-cyan-500" />
-                    Seniority Alignment
-                  </span>
-                  <span className="font-medium">{weights.seniority_alignment}%</span>
-                </div>
-                <Slider
-                  value={[weights.seniority_alignment]}
-                  onValueChange={([v]) => handleWeightChange("seniority_alignment", v)}
-                  max={25}
-                  min={5}
-                  step={1}
-                  className="[&>span]:bg-cyan-500"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-green-500" />
-                    ATS Keywords
-                  </span>
-                  <span className="font-medium">{weights.ats_keywords}%</span>
-                </div>
-                <Slider
-                  value={[weights.ats_keywords]}
-                  onValueChange={([v]) => handleWeightChange("ats_keywords", v)}
-                  max={20}
-                  min={3}
-                  step={1}
-                  className="[&>span]:bg-green-500"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Overall Score Card */}
       <Card className={`border-2 ${

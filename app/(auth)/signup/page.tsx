@@ -50,7 +50,15 @@ export default function SignUpPage() {
       if (error) throw error
       setIsSuccess(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create account")
+      const message = err instanceof Error ? err.message : "Failed to create account"
+      // Provide more helpful error messages for common Supabase issues
+      if (message.toLowerCase().includes("database error")) {
+        setError("Unable to create account. Please try again or contact support if the issue persists.")
+      } else if (message.toLowerCase().includes("already registered")) {
+        setError("This email is already registered. Try signing in instead.")
+      } else {
+        setError(message)
+      }
     } finally {
       setIsLoading(false)
     }

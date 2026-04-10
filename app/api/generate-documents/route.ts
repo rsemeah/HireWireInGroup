@@ -416,6 +416,32 @@ export async function POST(request: NextRequest) {
 
     const jobAnalysis = jobData.job_analyses?.[0]
     
+    // GATE: Evidence matching must be complete before generation
+    // Only enforce if job has requirements (some jobs may not have extracted requirements)
+    const hasRequirements = jobAnalysis?.qualifications_required?.length > 0
+    const evidenceMap = jobData.evidence_map as Record<string, unknown> | null
+    const matchingComplete = evidenceMap?.matching_complete === true
+    
+    if (hasRequirements && !matchingComplete) {
+      await supabase
+        .from("jobs")
+        .update({
+          generation_status: "failed",
+          generation_error: "matching_incomplete",
+        })
+        .eq("id", job_id)
+        .eq("user_id", userId)
+      
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "matching_incomplete",
+          user_message: "Complete evidence matching before generating materials. Go to Evidence Match and click 'Mark Complete & Continue'."
+        },
+        { status: 400 }
+      )
+    }
+    
     // Load gap clarifications for this job (job-specific context)
     const gapClarifications = (jobData.gap_clarifications as Array<{
       gap_requirement: string
@@ -461,13 +487,15 @@ export async function POST(request: NextRequest) {
       }>;
     } | null
 
-    // Merge profile with source resume data (profile takes precedence)
-    const effectiveName = profile?.full_name || sourceResumeData?.full_name || "Not provided"
-    const effectiveLocation = profile?.location || sourceResumeData?.location || "Not provided"
-    const effectiveSummary = profile?.summary || sourceResumeData?.summary || "Not provided"
-    const effectiveSkills = (profile?.skills?.length > 0 ? profile.skills : sourceResumeData?.skills) || []
-    const effectiveExperience = (profile?.experience?.length > 0 ? profile.experience : sourceResumeData?.experience) || []
-    const effectiveEducation = (profile?.education?.length > 0 ? profile.education : sourceResumeData?.education) || []
+  // Merge profile with source resume data (profile takes precedence)
+  // SECURITY: Sanitize free-form text fields to prevent prompt injection
+  const effectiveName = profile?.full_name || sourceResumeData?.full_name || "Not provided"
+  const effectiveLocation = profile?.location || sourceResumeData?.location || "Not provided"
+  const rawSummary = profile?.summary || sourceResumeData?.summary || "Not provided"
+  const effectiveSummary = sanitizeInput(rawSummary) // Prevent prompt injection via summary field
+  const effectiveSkills = (profile?.skills?.length > 0 ? profile.skills : sourceResumeData?.skills) || []
+  const effectiveExperience = (profile?.experience?.length > 0 ? profile.experience : sourceResumeData?.experience) || []
+  const effectiveEducation = (profile?.education?.length > 0 ? profile.education : sourceResumeData?.education) || []
 
     const profileContext = `
 CANDIDATE PROFILE:
@@ -579,7 +607,7 @@ NOTE: The candidate provided this additional context to address gaps. Use this i
 `
 
     // Step 1: Create evidence map and determine strategy (with retry for rate limits)
-    const { object: evidenceMap } = await withRetry(() => generateObject({
+    const { object: generatedEvidenceMap } = await withRetry(() => generateObject({
       model: groq(MODELS.VERSATILE),
       schema: EvidenceMapSchema,
       prompt: `Analyze the match between this candidate and job opportunity.
@@ -604,7 +632,7 @@ Be conservative - only include matches that are clearly supported by the evidenc
     const evidenceQuality = resumeEvidence.filter((e: { confidence_level: string }) => e.confidence_level === "high").length / (resumeEvidence.length || 1) * 100
     const { strategy, reasoning: strategyReasoning } = determineGenerationStrategy(
       jobData,
-      evidenceMap.requirement_coverage,
+      generatedEvidenceMap.requirement_coverage,
       evidenceQuality
     )
 
@@ -625,13 +653,13 @@ Be conservative - only include matches that are clearly supported by the evidenc
         error: "Generation blocked: This role is too much of a stretch.",
         strategy,
         strategy_reasoning: strategyReasoning,
-        requirement_coverage: evidenceMap.requirement_coverage,
-        gaps: evidenceMap.gaps,
+        requirement_coverage: generatedEvidenceMap.requirement_coverage,
+        gaps: generatedEvidenceMap.gaps,
       }, { status: 400 })
     }
 
     // Determine if there are unresolved gaps (gaps detected but not clarified)
-    const hasUnresolvedGaps = evidenceMap.gaps.length > 0 && gapClarifications.length === 0
+    const hasUnresolvedGaps = generatedEvidenceMap.gaps.length > 0 && gapClarifications.length === 0
     const strategyPrompt = buildStrategyPrompt(strategy, hasUnresolvedGaps)
 
     // Auto-select optimal resume template based on job analysis
@@ -658,9 +686,9 @@ ${evidenceContext}
 ${jobContext}
 
 MATCH CONTEXT:
-Skills: ${evidenceMap.matched_skills.join(", ")}
-Tools: ${evidenceMap.matched_tools.join(", ")}
-Gaps: ${evidenceMap.gaps.join(", ")}
+Skills: ${generatedEvidenceMap.matched_skills.join(", ")}
+Tools: ${generatedEvidenceMap.matched_tools.join(", ")}
+Gaps: ${generatedEvidenceMap.gaps.join(", ")}
 
 ${strategyPrompt}
 
@@ -975,17 +1003,17 @@ If no issues found, return empty arrays and overall_passed: true.`,
       .update({
         generated_resume: formattedResume,
         generated_cover_letter: formattedCoverLetter,
-        fit: evidenceMap.fit_score >= 70 ? "HIGH" : evidenceMap.fit_score >= 40 ? "MEDIUM" : "LOW",
-        score: evidenceMap.fit_score,
+        fit: generatedEvidenceMap.fit_score >= 70 ? "HIGH" : generatedEvidenceMap.fit_score >= 40 ? "MEDIUM" : "LOW",
+        score: generatedEvidenceMap.fit_score,
         score_reasoning: { 
-          rationale: evidenceMap.fit_rationale, 
-          gaps: evidenceMap.gaps,
+          rationale: generatedEvidenceMap.fit_rationale, 
+          gaps: generatedEvidenceMap.gaps,
           strategy,
           strategy_reasoning: strategyReasoning,
-          requirement_coverage: evidenceMap.requirement_coverage
+          requirement_coverage: generatedEvidenceMap.requirement_coverage
         },
-        score_strengths: evidenceMap.matched_skills,
-        score_gaps: evidenceMap.gaps,
+        score_strengths: generatedEvidenceMap.matched_skills,
+        score_gaps: generatedEvidenceMap.gaps,
         resume_strategy: strategy,
         evidence_map: {
           selected_evidence_ids: resumeEvidence.map((e: { id: string }) => e.id),
@@ -1009,6 +1037,12 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
           ...qualityCheck.ai_filler,
         ],
         quality_passed: qualityPassed,
+        // Store bullet-level provenance for traceability
+        resume_provenance: bulletProvenance.map(b => ({
+          bullet_text: b.bullet_text,
+          source_evidence_id: b.source_evidence_id,
+          evidence_title: b.source_evidence_title,
+        })),
       })
       .eq("id", job_id)
       .eq("user_id", userId)
@@ -1016,17 +1050,43 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
     if (updateError) {
       console.error("Error updating job:", updateError)
     }
+    
+    // Increment generations_this_month for usage tracking (only on successful generation)
+    // This enforces free tier limits and tracks premium usage
+    if (!updateError) {
+      const now = new Date()
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      
+      // Get current profile to check/reset usage
+      const { data: profile } = await supabase
+        .from("user_profile")
+        .select("generations_this_month, usage_reset_at")
+        .eq("user_id", userId)
+        .maybeSingle()
+      
+      // Reset counter if we're in a new month
+      const needsReset = !profile?.usage_reset_at || 
+        new Date(profile.usage_reset_at) < new Date(firstOfMonth)
+      
+      await supabase
+        .from("user_profile")
+        .update({
+          generations_this_month: needsReset ? 1 : (profile?.generations_this_month || 0) + 1,
+          usage_reset_at: needsReset ? firstOfMonth : profile?.usage_reset_at,
+        })
+        .eq("user_id", userId)
+    }
 
     // Update job analysis with matched evidence
     if (jobAnalysis) {
       await supabase
         .from("job_analyses")
         .update({
-          matched_skills: evidenceMap.matched_skills,
-          matched_tools: evidenceMap.matched_tools,
-          matched_projects: evidenceMap.matched_projects.map(p => p.project_name),
-          known_gaps: evidenceMap.gaps,
-          ats_match_score: evidenceMap.fit_score,
+          matched_skills: generatedEvidenceMap.matched_skills,
+          matched_tools: generatedEvidenceMap.matched_tools,
+          matched_projects: generatedEvidenceMap.matched_projects.map(p => p.project_name),
+          known_gaps: generatedEvidenceMap.gaps,
+          ats_match_score: generatedEvidenceMap.fit_score,
         })
         .eq("id", jobAnalysis.id)
         .eq("user_id", userId)
@@ -1056,13 +1116,13 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
       template_used: selectedTemplate,
       template_name: templateConfig.name,
       evidence_map: {
-        fit_score: evidenceMap.fit_score,
-        fit_rationale: evidenceMap.fit_rationale,
-        matched_skills: evidenceMap.matched_skills,
-        matched_tools: evidenceMap.matched_tools,
-        matched_experiences: evidenceMap.matched_experiences,
-        gaps: evidenceMap.gaps,
-        requirement_coverage: evidenceMap.requirement_coverage,
+        fit_score: generatedEvidenceMap.fit_score,
+        fit_rationale: generatedEvidenceMap.fit_rationale,
+        matched_skills: generatedEvidenceMap.matched_skills,
+        matched_tools: generatedEvidenceMap.matched_tools,
+        matched_experiences: generatedEvidenceMap.matched_experiences,
+        gaps: generatedEvidenceMap.gaps,
+        requirement_coverage: generatedEvidenceMap.requirement_coverage,
       },
       generated_resume: formattedResume,
       generated_cover_letter: formattedCoverLetter,

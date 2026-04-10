@@ -64,7 +64,7 @@ export function CoachChat({ className, conversationId, compact = false, onClose,
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const initialMessageSent = useRef(false)
 
-  const { messages, input, setInput, handleSubmit: submitMessage, isLoading, append } = useChat({
+  const { messages, input, setInput, handleSubmit: submitMessage, isLoading, append, error } = useChat({
     api: "/api/coach",
     body: {
       ...(jobContext ? {
@@ -78,7 +78,19 @@ export function CoachChat({ className, conversationId, compact = false, onClose,
       } : {}),
       ...(gapContext ? { gapContext } : {}),
     },
+    onError: (err) => {
+      console.error("[v0] Coach useChat error:", err)
+    },
   })
+
+  // Debug logging
+  useEffect(() => {
+    console.log("[v0] CoachChat mounted", { 
+      hasJobContext: !!jobContext, 
+      hasGapContext: !!gapContext,
+      hasInitialMessage: !!initialMessage 
+    })
+  }, [])
 
   // Send initial message on mount if provided
   useEffect(() => {
@@ -99,6 +111,7 @@ export function CoachChat({ className, conversationId, compact = false, onClose,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
+    console.log("[v0] CoachChat submitting message:", input.substring(0, 50))
     submitMessage(e)
   }
 
@@ -248,6 +261,16 @@ export function CoachChat({ className, conversationId, compact = false, onClose,
               <div className="flex items-center gap-2 py-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">Thinking...</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Error display */}
+          {error && (
+            <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg mt-4">
+              <div className="text-sm text-red-700">
+                <p className="font-medium">Coach Error</p>
+                <p className="text-red-600">{error.message || "Failed to get response. Please try again."}</p>
               </div>
             </div>
           )}
