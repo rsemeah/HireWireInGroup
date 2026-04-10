@@ -27,6 +27,8 @@ import {
   Sparkles,
   Info,
   Search,
+  RefreshCw,
+  FileCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
@@ -56,6 +58,8 @@ export default function EvidenceMatchPage() {
   const [requirementMatches, setRequirementMatches] = useState<RequirementKeywordMatch[]>([])
   const [selectedEvidence, setSelectedEvidence] = useState<Set<string>>(new Set())
   const [matchingMarkedComplete, setMatchingMarkedComplete] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
 
   // Load job and evidence data
   useEffect(() => {
@@ -314,14 +318,57 @@ export default function EvidenceMatchPage() {
     } else {
       if (markComplete) {
         setMatchingMarkedComplete(true)
-        toast.success("Evidence mapping complete! Proceeding to scoring...")
-        router.push(`/jobs/${jobId}/scoring`)
+        toast.success("Evidence mapping complete! You can now generate your materials below.")
+        // Don't redirect - let user generate from this page
+        // Scroll to the generate section
+        setTimeout(() => {
+          document.querySelector('[data-generate-section]')?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
       } else {
         toast.success("Evidence map saved (draft)")
       }
     }
     
     setSaving(false)
+  }
+
+  // Handle materials generation directly from evidence match page
+  async function handleGenerateMaterials() {
+    if (!matchingMarkedComplete) {
+      toast.error("Please mark evidence matching as complete first")
+      return
+    }
+    
+    setIsGenerating(true)
+    setGenerationError(null)
+    
+    try {
+      const response = await fetch("/api/generate-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          job_id: jobId,
+          selected_evidence_ids: Array.from(selectedEvidence)
+        }),
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success("Materials generated successfully!")
+        // Navigate to job detail to see results
+        router.push(`/jobs/${jobId}`)
+      } else {
+        const errorMsg = data.user_message || data.error || "Generation failed"
+        setGenerationError(errorMsg)
+        toast.error(errorMsg)
+      }
+    } catch (error) {
+      console.error("Generation error:", error)
+      setGenerationError("Failed to generate materials. Please try again.")
+      toast.error("Failed to generate materials")
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   // Calculate overall coverage
@@ -573,6 +620,65 @@ export default function EvidenceMatchPage() {
               />
             ))
           )}
+          
+          {/* Next Step: Generate Materials - Only show when matching is complete */}
+          <Separator className="my-6" />
+          
+          <Card 
+            data-generate-section
+            className={matchingMarkedComplete ? "border-green-200 bg-green-50/50" : "border-dashed bg-muted/30"}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileCheck className="h-5 w-5" />
+                Next Step: Generate Materials
+              </CardTitle>
+              <CardDescription>
+                {matchingMarkedComplete 
+                  ? "Your evidence matching is complete. Generate your tailored resume and cover letter."
+                  : "Complete evidence matching above to unlock generation."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {generationError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {generationError}
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  onClick={handleGenerateMaterials}
+                  disabled={!matchingMarkedComplete || isGenerating}
+                  className="flex-1"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Generate Resume & Cover Letter
+                    </>
+                  )}
+                </Button>
+                {matchingMarkedComplete && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => router.push(`/jobs/${jobId}`)}
+                  >
+                    Choose Template First
+                  </Button>
+                )}
+              </div>
+              {!matchingMarkedComplete && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  Click &quot;Complete & Continue&quot; above after reviewing your evidence matches.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </TooltipProvider>

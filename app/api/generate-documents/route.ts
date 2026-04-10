@@ -605,7 +605,7 @@ NOTE: The candidate provided this additional context to address gaps. Use this i
 `
 
     // Step 1: Create evidence map and determine strategy (with retry for rate limits)
-    const { object: evidenceMap } = await withRetry(() => generateObject({
+    const { object: generatedEvidenceMap } = await withRetry(() => generateObject({
       model: groq(MODELS.VERSATILE),
       schema: EvidenceMapSchema,
       prompt: `Analyze the match between this candidate and job opportunity.
@@ -630,7 +630,7 @@ Be conservative - only include matches that are clearly supported by the evidenc
     const evidenceQuality = resumeEvidence.filter((e: { confidence_level: string }) => e.confidence_level === "high").length / (resumeEvidence.length || 1) * 100
     const { strategy, reasoning: strategyReasoning } = determineGenerationStrategy(
       jobData,
-      evidenceMap.requirement_coverage,
+      generatedEvidenceMap.requirement_coverage,
       evidenceQuality
     )
 
@@ -651,13 +651,13 @@ Be conservative - only include matches that are clearly supported by the evidenc
         error: "Generation blocked: This role is too much of a stretch.",
         strategy,
         strategy_reasoning: strategyReasoning,
-        requirement_coverage: evidenceMap.requirement_coverage,
-        gaps: evidenceMap.gaps,
+        requirement_coverage: generatedEvidenceMap.requirement_coverage,
+        gaps: generatedEvidenceMap.gaps,
       }, { status: 400 })
     }
 
     // Determine if there are unresolved gaps (gaps detected but not clarified)
-    const hasUnresolvedGaps = evidenceMap.gaps.length > 0 && gapClarifications.length === 0
+    const hasUnresolvedGaps = generatedEvidenceMap.gaps.length > 0 && gapClarifications.length === 0
     const strategyPrompt = buildStrategyPrompt(strategy, hasUnresolvedGaps)
 
     // Auto-select optimal resume template based on job analysis
@@ -684,9 +684,9 @@ ${evidenceContext}
 ${jobContext}
 
 MATCH CONTEXT:
-Skills: ${evidenceMap.matched_skills.join(", ")}
-Tools: ${evidenceMap.matched_tools.join(", ")}
-Gaps: ${evidenceMap.gaps.join(", ")}
+Skills: ${generatedEvidenceMap.matched_skills.join(", ")}
+Tools: ${generatedEvidenceMap.matched_tools.join(", ")}
+Gaps: ${generatedEvidenceMap.gaps.join(", ")}
 
 ${strategyPrompt}
 
@@ -1001,17 +1001,17 @@ If no issues found, return empty arrays and overall_passed: true.`,
       .update({
         generated_resume: formattedResume,
         generated_cover_letter: formattedCoverLetter,
-        fit: evidenceMap.fit_score >= 70 ? "HIGH" : evidenceMap.fit_score >= 40 ? "MEDIUM" : "LOW",
-        score: evidenceMap.fit_score,
+        fit: generatedEvidenceMap.fit_score >= 70 ? "HIGH" : generatedEvidenceMap.fit_score >= 40 ? "MEDIUM" : "LOW",
+        score: generatedEvidenceMap.fit_score,
         score_reasoning: { 
-          rationale: evidenceMap.fit_rationale, 
-          gaps: evidenceMap.gaps,
+          rationale: generatedEvidenceMap.fit_rationale, 
+          gaps: generatedEvidenceMap.gaps,
           strategy,
           strategy_reasoning: strategyReasoning,
-          requirement_coverage: evidenceMap.requirement_coverage
+          requirement_coverage: generatedEvidenceMap.requirement_coverage
         },
-        score_strengths: evidenceMap.matched_skills,
-        score_gaps: evidenceMap.gaps,
+        score_strengths: generatedEvidenceMap.matched_skills,
+        score_gaps: generatedEvidenceMap.gaps,
         resume_strategy: strategy,
         evidence_map: {
           selected_evidence_ids: resumeEvidence.map((e: { id: string }) => e.id),
@@ -1048,11 +1048,11 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
       await supabase
         .from("job_analyses")
         .update({
-          matched_skills: evidenceMap.matched_skills,
-          matched_tools: evidenceMap.matched_tools,
-          matched_projects: evidenceMap.matched_projects.map(p => p.project_name),
-          known_gaps: evidenceMap.gaps,
-          ats_match_score: evidenceMap.fit_score,
+          matched_skills: generatedEvidenceMap.matched_skills,
+          matched_tools: generatedEvidenceMap.matched_tools,
+          matched_projects: generatedEvidenceMap.matched_projects.map(p => p.project_name),
+          known_gaps: generatedEvidenceMap.gaps,
+          ats_match_score: generatedEvidenceMap.fit_score,
         })
         .eq("id", jobAnalysis.id)
         .eq("user_id", userId)
@@ -1082,13 +1082,13 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
       template_used: selectedTemplate,
       template_name: templateConfig.name,
       evidence_map: {
-        fit_score: evidenceMap.fit_score,
-        fit_rationale: evidenceMap.fit_rationale,
-        matched_skills: evidenceMap.matched_skills,
-        matched_tools: evidenceMap.matched_tools,
-        matched_experiences: evidenceMap.matched_experiences,
-        gaps: evidenceMap.gaps,
-        requirement_coverage: evidenceMap.requirement_coverage,
+        fit_score: generatedEvidenceMap.fit_score,
+        fit_rationale: generatedEvidenceMap.fit_rationale,
+        matched_skills: generatedEvidenceMap.matched_skills,
+        matched_tools: generatedEvidenceMap.matched_tools,
+        matched_experiences: generatedEvidenceMap.matched_experiences,
+        gaps: generatedEvidenceMap.gaps,
+        requirement_coverage: generatedEvidenceMap.requirement_coverage,
       },
       generated_resume: formattedResume,
       generated_cover_letter: formattedCoverLetter,

@@ -67,23 +67,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Check plan - Coach is Pro-only
+    // Coach is available for all users - gap clarification is a core workflow feature
     const adminClient = createAdminClient()
-    const { data: userData } = await adminClient
-      .from("users")
-      .select("plan_type")
-      .eq("id", user.id)
-      .single()
-
-    if (userData?.plan_type !== "pro") {
-      return new Response(JSON.stringify({ 
-        error: "pro_required",
-        user_message: "AI Coach is a Pro feature. Upgrade to access personalized career coaching."
-      }), { 
-        status: 403,
-        headers: { "Content-Type": "application/json" }
-      })
-    }
 
     const body = await req.json()
     console.log("[v0] Coach API body parsed:", { 
