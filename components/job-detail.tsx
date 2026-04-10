@@ -430,10 +430,19 @@ export function JobDetail({ job, readiness }: JobDetailProps) {
       const { createClient } = await import("@/lib/supabase/client")
       const supabase = createClient()
       
-      // Load user evidence and profile
+      // Get current user for tenant isolation
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error("You must be logged in to generate materials")
+        setIsLoadingGaps(false)
+        return
+      }
+      
+      // Load user evidence and profile - EXPLICITLY filter by user_id for defense-in-depth
+      // RLS policies should enforce this, but explicit filtering is safer
       const [evidenceResult, profileResult] = await Promise.all([
-        supabase.from("evidence_library").select("*").eq("is_active", true),
-        supabase.from("user_profile").select("*").limit(1).maybeSingle()
+        supabase.from("evidence_library").select("*").eq("user_id", user.id).eq("is_active", true),
+        supabase.from("user_profile").select("*").eq("user_id", user.id).maybeSingle()
       ])
       
       const evidence = evidenceResult.data || []
