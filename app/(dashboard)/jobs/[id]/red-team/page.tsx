@@ -182,6 +182,20 @@ export default function RedTeamReviewPage() {
     if (error) {
       toast.error("Failed to approve")
     } else {
+      // Log audit event for quality pass
+      await supabase.from("audit_events").insert({
+        user_id: user.id,
+        job_id: jobId,
+        event_type: "quality_passed",
+        outcome: "approved",
+        reason: `Red Team review passed with ${activeIssues.length} non-critical issues acknowledged`,
+        metadata: {
+          approved_at: new Date().toISOString(),
+          issues_acknowledged: activeIssues.map(i => ({ type: i.type, severity: i.severity })),
+          resolved_count: resolvedIssues.size,
+        },
+      })
+      
       toast.success("Documents approved - Ready to apply!")
       router.push(`/jobs/${jobId}`)
     }

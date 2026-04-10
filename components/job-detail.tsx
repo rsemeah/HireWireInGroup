@@ -7,6 +7,7 @@ import type { Job, JobStatus, JobFit, RoleFamily, GenerationStatus } from "@/lib
 import { STATUS_CONFIG, FIT_CONFIG, ROLE_FAMILIES } from "@/lib/types"
 import { normalizeJobStatus } from "@/lib/job-lifecycle"
 import { updateJobStatus } from "@/lib/actions/jobs"
+import { applyToJob } from "@/lib/actions/apply"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -600,19 +601,43 @@ export function JobDetail({ job, readiness }: JobDetailProps) {
     }
   }
 
-  const handleApplyNow = () => {
+  const handleApplyNow = async () => {
+    // Gate check: must have quality passed (Red Team approval)
+    if (!canApply) {
+      toast.error("Cannot apply yet", {
+        description: reasonsNotReady.length > 0 
+          ? reasonsNotReady[0] 
+          : "Complete Red Team review before applying"
+      })
+      return
+    }
+    
+    // Copy resume to clipboard
     if (job.generated_resume) {
       navigator.clipboard.writeText(job.generated_resume)
       toast.success("Resume copied to clipboard!")
     }
+    
+    // Open job posting
     if (job.source_url) {
       window.open(job.source_url, "_blank")
     }
+    
+    // Prompt user to confirm application
     setTimeout(() => {
       toast.info("Mark as applied when done", {
         action: {
           label: "Mark Applied",
-          onClick: () => handleStatusChange("applied"),
+          onClick: async () => {
+            const result = await applyToJob(job.id, "manual")
+            if (result.success) {
+              toast.success("Marked as applied!")
+              setStatus("applied")
+              router.refresh()
+            } else {
+              toast.error(result.error || "Failed to mark as applied")
+            }
+          },
         },
       })
     }, 1000)
