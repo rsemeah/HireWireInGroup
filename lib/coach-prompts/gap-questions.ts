@@ -175,6 +175,29 @@ const QUESTION_TEMPLATES: Record<GapCategory, (gap: DetectedGap) => GapQuestion[
       coaching_hint: "Help surface hidden leadership experience",
     },
   ],
+
+  // EDUCATION REQUIREMENT HANDLING
+  // These questions are semantically correct for education gaps
+  education: (gap) => [
+    {
+      id: `q-${gap.id}-edu-1`,
+      gap_id: gap.id,
+      question_text: `The role mentions "${gap.requirement}". Do you have a degree, certification, or equivalent professional experience that covers this? Many employers accept relevant work experience in place of a formal degree.`,
+      purpose: "fill_gap",
+      response_handling: "save_to_profile",
+      example_good_response: "I have a Master's in Information Systems, or I have 8 years of hands-on experience in this field",
+      coaching_hint: "Check profile for existing education before asking. Higher degrees satisfy lower requirements.",
+    },
+    {
+      id: `q-${gap.id}-edu-2`,
+      gap_id: gap.id,
+      question_text: `If you don't have the specific degree mentioned, what relevant certifications, bootcamps, or professional training have you completed? These often demonstrate equivalent competency.`,
+      purpose: "fill_gap",
+      response_handling: "save_to_profile",
+      follow_up_if_yes: "Great! I'll note this as an equivalent qualification.",
+      coaching_hint: "Certifications and professional training can often substitute for formal degrees",
+    },
+  ],
 }
 
 // ============================================================================
@@ -228,6 +251,7 @@ function generateIntroduction(gap: DetectedGap): string {
     ownership_unclear: `Let's clarify your role in this work so we represent it accurately.`,
     domain_gap: `The role is in a specific domain. Let's explore your transferable knowledge.`,
     seniority_mismatch: `This role may expect senior-level impact. Let's surface any hidden leadership experience.`,
+    education: `Let's confirm your educational background for this role. Note: a higher degree (like a Master's) always satisfies requirements for lower degrees.`,
   }
 
   return intros[gap.category] || `Let's address this gap in your evidence: ${gap.requirement}`
