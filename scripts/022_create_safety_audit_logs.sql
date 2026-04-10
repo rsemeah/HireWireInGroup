@@ -1,25 +1,31 @@
 -- Migration: Create safety_audit_logs table
 -- The checkSafety() function in lib/safety/index.ts writes to this table
--- but it didn't exist - this creates it with proper RLS
+-- Schema matches what the code expects to insert
+-- NOTE: This script is idempotent - safe to run multiple times
 
--- Create safety_audit_logs table
-CREATE TABLE IF NOT EXISTS safety_audit_logs (
+-- Drop existing table if schema doesn't match (recreate with correct schema)
+DROP TABLE IF EXISTS safety_audit_logs CASCADE;
+
+-- Create safety_audit_logs table matching lib/safety/index.ts insert schema
+CREATE TABLE safety_audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  action_type TEXT NOT NULL,
-  risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-  input_hash TEXT, -- Hash of input for deduplication without storing PII
-  flags_triggered JSONB DEFAULT '[]'::jsonb,
+  session_id TEXT,
+  timestamp TIMESTAMPTZ DEFAULT now(),
   blocked BOOLEAN DEFAULT false,
-  metadata JSONB DEFAULT '{}'::jsonb,
+  violations JSONB DEFAULT '[]'::jsonb,
+  input_hash TEXT, -- Hash of input for deduplication without storing PII
+  risk_score NUMERIC,
+  attack_vectors JSONB DEFAULT '[]'::jsonb,
+  response_type TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Create indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_safety_audit_user ON safety_audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_safety_audit_risk ON safety_audit_logs(risk_level);
-CREATE INDEX IF NOT EXISTS idx_safety_audit_created ON safety_audit_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_safety_audit_blocked ON safety_audit_logs(blocked) WHERE blocked = true;
+CREATE INDEX idx_safety_audit_user ON safety_audit_logs(user_id);
+CREATE INDEX idx_safety_audit_risk ON safety_audit_logs(risk_score);
+CREATE INDEX idx_safety_audit_created ON safety_audit_logs(created_at DESC);
+CREATE INDEX idx_safety_audit_blocked ON safety_audit_logs(blocked) WHERE blocked = true;
 
 -- Enable RLS
 ALTER TABLE safety_audit_logs ENABLE ROW LEVEL SECURITY;

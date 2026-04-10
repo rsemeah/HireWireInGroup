@@ -1,9 +1,17 @@
 -- Migration: Enable RLS on companies table
 -- SECURITY FIX: companies table had RLS disabled, allowing any user to read/write any company
 -- This migration enables RLS and creates appropriate policies
+-- NOTE: This script is idempotent - safe to run multiple times
 
--- Enable RLS on companies table
+-- Enable RLS on companies table (idempotent)
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "companies_select_authenticated" ON companies;
+DROP POLICY IF EXISTS "companies_insert_authenticated" ON companies;
+DROP POLICY IF EXISTS "companies_update_own_jobs" ON companies;
+DROP POLICY IF EXISTS "companies_no_delete" ON companies;
+DROP POLICY IF EXISTS "companies_service_role_all" ON companies;
 
 -- Policy: Users can read companies (public read for company info display)
 -- Companies are shared resources - users need to see company names/info for their jobs
