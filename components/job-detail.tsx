@@ -454,6 +454,7 @@ export function JobDetail({ job, readiness }: JobDetailProps) {
         profile ? {
           skills: profile.skills || [],
           experience: profile.experience || [],
+          education: profile.education || [],
         } : null,
         job.score_gaps || []
       )

@@ -122,23 +122,54 @@ export function normalizeDegreeLevel(text: string): DegreeLevel | null {
 
 /**
  * Check if a requirement text is about education/degree
+ * Uses word boundary matching to avoid false positives (e.g., "ba" in "background")
  */
 export function isEducationRequirement(requirementText: string): boolean {
   if (!requirementText) return false
   
   const textLower = requirementText.toLowerCase()
   
-  // Direct education keywords
-  const educationKeywords = [
+  // Strong indicators - these must be present for education detection
+  // Use word boundaries to avoid false positives (e.g., "ba" in "background")
+  const strongKeywords = [
     "degree", "bachelor", "master", "phd", "doctorate", "diploma",
-    "education", "graduated", "university", "college", "bs", "ba", 
-    "ms", "ma", "mba", "bsc", "msc", "b.s.", "b.a.", "m.s.", "m.a.",
-    "associate", "certification", "certified", "or equivalent"
+    "graduated", "university", "college", "or equivalent"
   ]
   
-  for (const keyword of educationKeywords) {
-    if (textLower.includes(keyword)) {
+  // Check strong keywords with word boundaries
+  for (const keyword of strongKeywords) {
+    const regex = new RegExp(`\\b${keyword}\\b`, "i")
+    if (regex.test(requirementText)) {
       return true
+    }
+  }
+  
+  // Abbreviations that need careful word boundary matching
+  // These are only valid if they appear as standalone words or with periods
+  const abbreviations = [
+    "b.s.", "b.a.", "m.s.", "m.a.", "m.b.a.",
+    "bsc", "msc", "beng", "meng"
+  ]
+  
+  for (const abbr of abbreviations) {
+    const escaped = abbr.replace(/\./g, "\\.")
+    const regex = new RegExp(`\\b${escaped}\\b`, "i")
+    if (regex.test(requirementText)) {
+      return true
+    }
+  }
+  
+  // Only check these short abbreviations if they appear with degree context
+  // (to avoid "ba" matching "background", "ms" matching "teams", etc.)
+  const shortAbbrs = ["bs", "ba", "ms", "ma", "mba"]
+  const hasEducationContext = /\b(degree|education|require[ds]?)\b/i.test(requirementText)
+  
+  if (hasEducationContext) {
+    for (const abbr of shortAbbrs) {
+      const regex = new RegExp(`\\b${abbr}\\b`, "i")
+      if (regex.test(requirementText)) {
+        return true
+      }
     }
   }
   
