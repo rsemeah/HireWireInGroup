@@ -1,19 +1,17 @@
 /**
  * resumeParser
  *
- * Extracts structured data from raw resume text using Groq.
+ * Extracts structured data from raw resume text using Claude via AI Gateway.
  * Returns a ParsedResume that mapResumeToEvidence can consume.
  *
  * Kept as a separate helper so the upload route stays thin
  * and this logic can be reused by future parse endpoints.
  */
 
-import { createGroq } from "@ai-sdk/groq"
-import { generateObject } from "ai"
+import { generateText, Output } from "ai"
 import { z } from "zod"
 import type { ParsedResume } from "./mapResumeToEvidence"
-
-const groq = createGroq({ apiKey: process.env.GROQ_API_KEY })
+import { CLAUDE_MODELS } from "./adapters/anthropic"
 
 // ── Zod schemas for structured extraction ─────────────────────────────────
 
@@ -70,16 +68,12 @@ const ParsedResumeSchema = z.object({
 
 /**
  * Parse raw resume text into a structured ParsedResume object.
- * Throws if Groq is not configured or extraction fails.
+ * Uses Claude via AI Gateway for extraction.
  */
 export async function parseResumeText(resumeText: string): Promise<ParsedResume> {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured")
-  }
-
-  const { object } = await generateObject({
-    model: groq("llama-3.3-70b-versatile"),
-    schema: ParsedResumeSchema,
+  const result = await generateText({
+    model: CLAUDE_MODELS.SONNET,
+    output: Output.object({ schema: ParsedResumeSchema }),
     prompt: `Extract all structured information from the following resume text.
 Be thorough and accurate. Do not invent information not present in the text.
 Return empty arrays for sections that are not present.
@@ -88,5 +82,5 @@ RESUME TEXT:
 ${resumeText}`,
   })
 
-  return object as ParsedResume
+  return result.object as ParsedResume
 }
