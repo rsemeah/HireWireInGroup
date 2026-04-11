@@ -211,7 +211,7 @@ export default function ProfilePage() {
             linkedin_url: data.linkedin_url || "",
             github_url: data.github_url || "",
             website_url: data.website_url || "",
-            links: data.links || [],
+            links: Array.isArray(data.links) ? data.links : [],
           })
         }
       }
@@ -864,7 +864,7 @@ export default function ProfilePage() {
                 <p className="text-xs mt-1">Add your LinkedIn, GitHub, portfolio, or other professional links</p>
               </div>
             ) : (
-              (profile.links || []).map((link) => {
+              (Array.isArray(profile.links) ? profile.links : []).map((link) => {
                 const linkConfig = LINK_TYPES.find(lt => lt.value === link.type) || LINK_TYPES[4]
                 return (
                   <div key={link.id} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
