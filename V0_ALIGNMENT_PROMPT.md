@@ -223,20 +223,6 @@ always go through `@/lib/analytics`.
 
 ---
 
-## Sentry Error Capture
-
-API routes must capture errors to Sentry in their catch blocks:
-
-```typescript
-} catch (error) {
-  const { captureError } = await import("@/lib/sentry")
-  captureError(error instanceof Error ? error : new Error(String(error)), {
-    tags: { route: "your-route-name" },
-  })
-  return NextResponse.json({ success: false, error: "..." }, { status: 500 })
-}
-```
-
 ---
 
 ## What v0 Must Do Before Submitting Any PR
