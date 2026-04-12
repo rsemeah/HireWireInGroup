@@ -271,10 +271,45 @@ export default function ProfilePage() {
   const saveProfile = async () => {
     setIsSaving(true)
     try {
+      // First, persist any pending links that haven't been saved yet
+      const pendingLinks = profile.links.filter(
+        link => (link.isPending || link.id.startsWith("temp-")) && link.url.trim()
+      )
+      
+      if (pendingLinks.length > 0) {
+        const linkPromises = pendingLinks.map(async (link) => {
+          const result = await addProfileLink({
+            link_type: link.type as LinkType,
+            url: link.url,
+            label: link.label,
+          })
+          if (result.success && result.link) {
+            return { oldId: link.id, newId: result.link.id }
+          }
+          return null
+        })
+        
+        const results = await Promise.all(linkPromises)
+        
+        // Update local state with new IDs
+        setProfile(prev => ({
+          ...prev,
+          links: prev.links.map(link => {
+            const updated = results.find(r => r?.oldId === link.id)
+            if (updated) {
+              return { ...link, id: updated.newId, isPending: false }
+            }
+            return link
+          }),
+        }))
+      }
+      
+      // Then save the rest of the profile (excluding links - they're handled separately)
+      const { links, ...profileWithoutLinks } = profile
       const res = await fetch("/api/profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(profileWithoutLinks),
       })
       
       if (res.ok) {
@@ -440,6 +475,7 @@ export default function ProfilePage() {
       ...prev,
       links: [...prev.links, { id: `temp-${crypto.randomUUID()}`, type, url: "", label: "", isPending: true }],
     }))
+    setHasChanges(true) // Enable Save button when adding new link
   }
 
   const updateLink = (id: string, field: keyof ProfileLink, value: string) => {
@@ -449,6 +485,7 @@ export default function ProfilePage() {
         link.id === id ? { ...link, [field]: value } : link
       ),
     }))
+    setHasChanges(true) // Enable Save button when editing link
     // Type change on a persisted link: update DB immediately
     if (field === "type") {
       const link = profile.links.find(l => l.id === id)
