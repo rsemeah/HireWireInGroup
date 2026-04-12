@@ -3,7 +3,7 @@
 /**
  * Server Actions for Profile Links
  * 
- * CRUD operations for the profile_links table.
+ * CRUD operations for the user_profile_links table.
  * Supports multiple links per type (e.g., multiple GitHub repos).
  */
 
@@ -255,7 +255,7 @@ export async function setPrimaryLink(id: string): Promise<{
 }
 
 /**
- * Migrate legacy links from user_profile.links to profile_links table
+ * Migrate legacy links from user_profile.links to user_profile_links table
  */
 export async function migrateLegacyLinks(): Promise<{
   success: boolean
