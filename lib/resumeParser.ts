@@ -82,5 +82,5 @@ RESUME TEXT:
 ${resumeText}`,
   })
 
-  return result.object as ParsedResume
+  return result.experimental_output as ParsedResume
 }
