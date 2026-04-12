@@ -105,14 +105,24 @@ export async function POST(req: NextRequest) {
     // Define tools for the coach
     const coachTools = {
       getProfile: tool({
-        description: "Get the user's profile including education history, experience, and skills. IMPORTANT: Always check education before asking about degree requirements - a Master's satisfies Bachelor's requirements.",
+        description: "Get the user's profile including education history, experience, skills, and professional links (LinkedIn, GitHub, portfolio). IMPORTANT: Always check education before asking about degree requirements - a Master's satisfies Bachelor's requirements.",
         parameters: z.object({}),
         execute: async () => {
-          const { data } = await adminClient
-            .from("user_profile")
-            .select("*")
-            .eq("user_id", user.id)
-            .single()
+          // Parallel fetch profile and links from user_profile_links
+          const [profileResult, linksResult] = await Promise.all([
+            adminClient
+              .from("user_profile")
+              .select("*")
+              .eq("user_id", user.id)
+              .single(),
+            adminClient
+              .from("user_profile_links")
+              .select("id, link_type, url, label, is_primary")
+              .eq("user_id", user.id)
+          ])
+          
+          const data = profileResult.data
+          const links = linksResult.data || []
           
           if (data) {
             // Parse education JSONB and surface it clearly for the LLM
@@ -129,8 +139,18 @@ export async function POST(req: NextRequest) {
               `${e.degree || "Degree"} in ${e.field || "Unknown Field"} from ${e.school || e.institution || "Unknown School"}${e.graduation_year ? ` (${e.graduation_year})` : ""}`
             ).join("; ") || "No education on file"
             
+            // Extract specific link URLs for easy access
+            const linkedinUrl = links.find(l => l.link_type === "linkedin")?.url || null
+            const githubUrl = links.find(l => l.link_type === "github")?.url || null
+            const portfolioUrl = links.find(l => l.link_type === "portfolio")?.url || null
+            
             return {
               ...data,
+              // Professional links from user_profile_links table
+              links,
+              linkedinUrl,
+              githubUrl,
+              portfolioUrl,
               // Explicitly surface education for gap matching
               education_summary: educationSummary,
               has_bachelors: education?.some(e => {

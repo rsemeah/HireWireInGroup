@@ -8,7 +8,7 @@
  * and this logic can be reused by future parse endpoints.
  */
 
-import { generateObject } from "ai"
+import { generateText, Output } from "ai"
 import { z } from "zod"
 import type { ParsedResume } from "./mapResumeToEvidence"
 import { CLAUDE_MODELS } from "./adapters/anthropic"
@@ -71,9 +71,9 @@ const ParsedResumeSchema = z.object({
  * Uses Claude via AI Gateway for extraction.
  */
 export async function parseResumeText(resumeText: string): Promise<ParsedResume> {
-  const { object } = await generateObject({
+  const result = await generateText({
     model: CLAUDE_MODELS.SONNET,
-    schema: ParsedResumeSchema,
+    output: Output.object({ schema: ParsedResumeSchema }),
     prompt: `Extract all structured information from the following resume text.
 Be thorough and accurate. Do not invent information not present in the text.
 Return empty arrays for sections that are not present.
@@ -82,5 +82,5 @@ RESUME TEXT:
 ${resumeText}`,
   })
 
-  return object as ParsedResume
+  return result.object as ParsedResume
 }

@@ -41,6 +41,14 @@ import { toast } from "sonner"
 import { BackButton } from "@/components/back-button"
 import { ResumeUpload } from "@/components/resume-upload"
 import { PendingChangeCard } from "@/components/pending-change-card"
+import {
+  getProfileLinks,
+  addProfileLink,
+  updateProfileLink,
+  removeProfileLink,
+  migrateLegacyLinks,
+  type LinkType,
+} from "@/lib/actions/profile-links"
 
 interface Experience {
   title: string
@@ -62,6 +70,7 @@ interface ProfileLink {
   type: "linkedin" | "github" | "portfolio" | "website" | "other"
   url: string
   label?: string
+  isPending?: boolean // true when link has not been saved to DB yet
 }
 
 interface UserProfile {
@@ -191,9 +200,24 @@ export default function ProfilePage() {
 
   const loadProfile = async () => {
     try {
-      const res = await fetch("/api/profile")
-      if (res.ok) {
-        const data = await res.json()
+      // Fetch profile and links in parallel
+      const [profileRes, linksResult] = await Promise.all([
+        fetch("/api/profile"),
+        getProfileLinks(),
+      ])
+      
+      if (profileRes.ok) {
+        const data = await profileRes.json()
+        
+        // Map server links to local format
+        const serverLinks: ProfileLink[] = (linksResult.links || []).map(l => ({
+          id: l.id,
+          type: l.link_type as ProfileLink["type"],
+          url: l.url,
+          label: l.label || "",
+          isPending: false,
+        }))
+        
         if (data) {
           setProfile({
             ...emptyProfile,
@@ -211,7 +235,28 @@ export default function ProfilePage() {
             linkedin_url: data.linkedin_url || "",
             github_url: data.github_url || "",
             website_url: data.website_url || "",
-            links: Array.isArray(data.links) ? data.links : [],
+            links: serverLinks,
+          })
+        }
+        
+        // Auto-migrate legacy links (fire-and-forget)
+        if (data?.linkedin_url || data?.github_url || data?.website_url) {
+          migrateLegacyLinks().then(result => {
+            if (result.migratedCount > 0) {
+              // Reload links after migration
+              getProfileLinks().then(freshLinks => {
+                if (freshLinks.success) {
+                  const migrated = freshLinks.links.map(l => ({
+                    id: l.id,
+                    type: l.link_type as ProfileLink["type"],
+                    url: l.url,
+                    label: l.label || "",
+                    isPending: false,
+                  }))
+                  setProfile(prev => ({ ...prev, links: migrated }))
+                }
+              })
+            }
           })
         }
       }
@@ -388,19 +433,19 @@ export default function ProfilePage() {
     setHasChanges(true)
   }
 
-  // Link management functions
+  // Link management functions - using server actions with isPending indicator
   const addLink = (type: ProfileLink["type"] = "other") => {
     const newLink: ProfileLink = {
-      id: crypto.randomUUID(),
+      id: `temp-${crypto.randomUUID()}`, // temp prefix indicates pending
       type,
       url: "",
       label: "",
+      isPending: true, // Mark as unsaved
     }
     setProfile(prev => ({
       ...prev,
       links: [...prev.links, newLink],
     }))
-    setHasChanges(true)
   }
 
   const updateLink = (id: string, field: keyof ProfileLink, value: string) => {
@@ -410,15 +455,75 @@ export default function ProfilePage() {
         link.id === id ? { ...link, [field]: value } : link
       ),
     }))
-    setHasChanges(true)
   }
 
-  const removeLink = (id: string) => {
+  // Persist link on blur - handles both new (add) and existing (update)
+  const persistLink = async (id: string) => {
+    const link = profile.links.find(l => l.id === id)
+    if (!link || !link.url.trim()) return // Don't save empty URLs
+
+    if (link.isPending || id.startsWith("temp-")) {
+      // New link - add to database
+      const result = await addProfileLink({
+        link_type: link.type as LinkType,
+        url: link.url,
+        label: link.label,
+      })
+      
+      if (result.success && result.link) {
+        // Swap temp ID with real DB ID and clear isPending
+        setProfile(prev => ({
+          ...prev,
+          links: prev.links.map(l =>
+            l.id === id ? { ...l, id: result.link!.id, isPending: false } : l
+          ),
+        }))
+        toast.success("Link saved")
+      } else {
+        toast.error(result.error || "Failed to save link")
+      }
+    } else {
+      // Existing link - update in database
+      const result = await updateProfileLink({
+        id,
+        url: link.url,
+        label: link.label,
+        link_type: link.type as LinkType,
+      })
+      
+      if (result.success) {
+        toast.success("Link updated")
+      } else {
+        toast.error(result.error || "Failed to update link")
+      }
+    }
+  }
+
+  const removeLink = async (id: string) => {
+    // Optimistic UI removal
+    const linkToRemove = profile.links.find(l => l.id === id)
     setProfile(prev => ({
       ...prev,
       links: prev.links.filter(link => link.id !== id),
     }))
-    setHasChanges(true)
+
+    // If it's a pending link (not saved yet), no server call needed
+    if (linkToRemove?.isPending || id.startsWith("temp-")) {
+      return
+    }
+
+    // Otherwise, delete from server
+    const result = await removeProfileLink(id)
+    if (!result.success) {
+      // Restore on failure
+      if (linkToRemove) {
+        setProfile(prev => ({
+          ...prev,
+          links: [...prev.links, linkToRemove],
+        }))
+      }
+      toast.error(result.error || "Failed to remove link")
+    }
   }
 
   // Helper to get icon for link type
@@ -866,15 +971,22 @@ export default function ProfilePage() {
             ) : (
               (Array.isArray(profile.links) ? profile.links : []).map((link) => {
                 const linkConfig = LINK_TYPES.find(lt => lt.value === link.type) || LINK_TYPES[4]
+                const isUnsaved = link.isPending || link.id.startsWith("temp-")
                 return (
-                  <div key={link.id} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                  <div key={link.id} className={`flex items-center gap-3 p-3 border rounded-lg ${isUnsaved ? "bg-amber-50/50 border-amber-200" : "bg-muted/30"}`}>
                     <div className="flex items-center justify-center h-9 w-9 rounded-md bg-background border">
                       {getLinkIcon(link.type)}
                     </div>
                     <div className="flex-1 grid gap-2 sm:grid-cols-[1fr_2fr]">
                       <Select
                         value={link.type}
-                        onValueChange={(value) => updateLink(link.id, "type", value)}
+                        onValueChange={(value) => {
+                          updateLink(link.id, "type", value)
+                          // Auto-save type change for existing links
+                          if (!isUnsaved) {
+                            persistLink(link.id)
+                          }
+                        }}
                       >
                         <SelectTrigger className="h-9">
                           <SelectValue />
@@ -891,12 +1003,17 @@ export default function ProfilePage() {
                         type="url"
                         value={link.url}
                         onChange={(e) => updateLink(link.id, "url", e.target.value)}
+                        onBlur={() => persistLink(link.id)}
                         placeholder={linkConfig?.placeholder || "https://..."}
-                        className="h-9"
+                        className={`h-9 ${isUnsaved ? "italic" : ""}`}
                       />
                     </div>
                     <div className="flex items-center gap-1">
-                      {link.url && (
+                      {/* Unsaved indicator */}
+                      {isUnsaved && (
+                        <span className="text-xs text-amber-600 italic mr-1">unsaved</span>
+                      )}
+                      {link.url && !isUnsaved && (
                         <a 
                           href={link.url} 
                           target="_blank" 
