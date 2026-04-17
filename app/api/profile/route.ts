@@ -38,6 +38,15 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .maybeSingle()
 
+  // Validate linkedin_raw_text: if provided it must be at least 200 chars
+  const linkedinRawText = body.linkedin_raw_text ?? null
+  if (linkedinRawText !== null && linkedinRawText.trim().length > 0 && linkedinRawText.trim().length < 200) {
+    return NextResponse.json(
+      { error: "LinkedIn text must be at least 200 characters or left empty." },
+      { status: 400 }
+    )
+  }
+
   const profileFields = {
     full_name: body.full_name,
     title: body.title ?? null,
@@ -52,6 +61,7 @@ export async function POST(request: Request) {
     // linkedin_url does not exist on user_profile — owned by user_profile_links
     github_url: body.github_url ?? null,
     website_url: body.website_url ?? null,
+    linkedin_raw_text: linkedinRawText?.trim() || null,
     // links is owned by profile_links table — do not write here
   }
 
