@@ -47,6 +47,27 @@ export async function POST(request: Request) {
     )
   }
 
+  // Normalize education to canonical shape {degree, school, year} and deduplicate
+  const rawEducation: Array<Record<string, unknown>> = Array.isArray(body.education) ? body.education : []
+  const seenEdu = new Set<string>()
+  const normalizedEducation = rawEducation
+    .map((edu) => {
+      const degree = String(edu.degree || "")
+      const school = String(edu.school || "")
+      let year = String(edu.year || "")
+      if (!year && edu.date_range) {
+        const match = String(edu.date_range).match(/\d{4}/)
+        if (match) year = match[0]
+      }
+      return { degree, school, year }
+    })
+    .filter((edu) => {
+      const key = `${edu.degree.toLowerCase()}|${edu.school.toLowerCase()}`
+      if (seenEdu.has(key)) return false
+      seenEdu.add(key)
+      return true
+    })
+
   const profileFields = {
     full_name: body.full_name,
     title: body.title ?? null,
@@ -55,7 +76,7 @@ export async function POST(request: Request) {
     location: body.location,
     summary: body.summary,
     experience: body.experience,
-    education: body.education,
+    education: normalizedEducation,
     skills: body.skills,
     avatar_url: body.avatar_url,
     // linkedin_url does not exist on user_profile — owned by user_profile_links

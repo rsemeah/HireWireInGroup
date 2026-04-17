@@ -222,6 +222,29 @@ export default function ProfilePage() {
         }))
         
         if (data) {
+          // Normalize education entries: coerce any parser-shaped entries
+          // ({date_range, field, honors}) to the UI shape ({degree, school, year})
+          // and deduplicate by degree+school to prevent double entries from
+          // prior incorrect writes.
+          const rawEducation: Array<Record<string, unknown>> = Array.isArray(data.education) ? data.education : []
+          const seenEdu = new Set<string>()
+          const normalizedEducation: Education[] = []
+          for (const edu of rawEducation) {
+            const degree = String(edu.degree || "")
+            const school = String(edu.school || "")
+            // Coerce year: prefer 'year', fall back to extracting a 4-digit year
+            // from 'date_range' (e.g. "2015 – 2019" → "2019")
+            let year = String(edu.year || "")
+            if (!year && edu.date_range) {
+              const match = String(edu.date_range).match(/\d{4}/)
+              if (match) year = match[0]
+            }
+            const key = `${degree.toLowerCase()}|${school.toLowerCase()}`
+            if (seenEdu.has(key)) continue
+            seenEdu.add(key)
+            normalizedEducation.push({ degree, school, year })
+          }
+
           setProfile({
             ...emptyProfile,
             id: data.id,
@@ -232,7 +255,7 @@ export default function ProfilePage() {
             location: data.location || "",
             summary: data.summary || "",
             experience: Array.isArray(data.experience) ? data.experience : [],
-            education: Array.isArray(data.education) ? data.education : [],
+            education: normalizedEducation,
             skills: data.skills || [],
             avatar_url: data.avatar_url || "",
             linkedin_url: data.linkedin_url || "",
