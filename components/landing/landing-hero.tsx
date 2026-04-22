@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
+import { HireWireLogo } from "@/components/hirewire-logo"
 
 // Virgil Abloh / Off-White diagonal stripe corner accent
 function AblohStripeCorner({
@@ -63,24 +64,12 @@ export function LandingHero() {
 
       <div className="relative mx-auto max-w-5xl px-6 py-20 md:py-28 flex flex-col items-center text-center">
 
-        {/* HireWire wordmark — large, white, serif */}
-        <div className="mb-10 md:mb-14">
-          <h1
-            className="font-serif text-white leading-none select-none"
-            style={{
-              fontSize: "clamp(3.5rem, 10vw, 7rem)",
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-              textShadow: "0 2px 32px rgba(0,0,0,0.35)",
-            }}
-          >
-            HireWire
-          </h1>
+        {/* HireWire logo image — barbed wire graffiti mark */}
+        <div className="mb-10 md:mb-14 w-full max-w-xs md:max-w-sm">
+          <HireWireLogo variant="light" size="xl" />
           {/* Abloh-style quotation marks label — signature design language */}
-          <p
-            className="text-white/50 text-xs tracking-[0.3em] uppercase mt-3 font-mono"
-          >
-            {"\"Job Application Engine\""}
+          <p className="text-white/50 text-xs tracking-[0.3em] uppercase mt-3 font-mono text-center">
+            {'"Career Operating OS"'}
           </p>
         </div>
 

@@ -1,21 +1,22 @@
 import Link from "next/link"
+import { HireWireLogo } from "@/components/hirewire-logo"
 
 export function LandingFooter() {
   return (
-    <footer className="bg-foreground text-background border-t border-background/10">
+    <footer style={{ backgroundColor: "#7B1212" }} className="border-t border-white/10">
       <div className="mx-auto max-w-6xl px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
-        <p className="font-serif text-lg font-medium tracking-tight text-background/80">
-          HireWire
-        </p>
+        <div className="w-24">
+          <HireWireLogo variant="light" size="sm" />
+        </div>
 
-        <nav className="flex items-center gap-6 text-xs text-background/40">
-          <Link href="/landing" className="hover:text-background/70 transition-colors">Home</Link>
-          <a href="mailto:support@hirewire.ai" className="hover:text-background/70 transition-colors">Support</a>
-          <Link href="/login" className="hover:text-background/70 transition-colors">Sign in</Link>
+        <nav className="flex items-center gap-6 text-xs text-white/40">
+          <Link href="/landing" className="hover:text-white/70 transition-colors">Home</Link>
+          <a href="mailto:support@hirewire.ai" className="hover:text-white/70 transition-colors">Support</a>
+          <Link href="/login" className="hover:text-white/70 transition-colors">Sign in</Link>
         </nav>
 
-        <p className="text-xs text-background/30">
-          &copy; {new Date().getFullYear()} HireWire. All rights reserved.
+        <p className="text-xs text-white/25 font-mono">
+          &copy; {new Date().getFullYear()} HireWire
         </p>
       </div>
     </footer>
