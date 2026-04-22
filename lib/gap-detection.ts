@@ -9,9 +9,11 @@ import type { EvidenceRecord, Job } from "./types"
 import {
   isEducationRequirement,
   extractDegreeLevel,
+  normalizeDegreeLevel,
   meetsOrExceedsDegreeRequirement,
   extractUserDegrees,
   canExperienceSubstitute,
+  getHighestDegree,
   type DegreeLevel,
 } from "./education-normalization"
 
@@ -190,7 +192,7 @@ export function detectGaps(
 
   // 3. Check for weak evidence (vague bullets without metrics)
   for (const evidence of evidenceLibrary) {
-    if (evidence.confidence_level === "low" || !hasMetric(evidence.achievement || "")) {
+    if (evidence.confidence_level === "low" || !hasMetric(evidence.outcomes?.[0] ?? evidence.approved_achievement_bullets?.[0] ?? "")) {
       const isRelevant = isEvidenceRelevantToJob(evidence, jobAnalysis)
       if (isRelevant) {
         gaps.push({
@@ -200,9 +202,9 @@ export function detectGaps(
           classification: "ambiguous",
           requirement: "Quantified achievement",
           requirement_source: "Your Evidence",
-          current_evidence: evidence.achievement || evidence.title,
+          current_evidence: evidence.outcomes?.[0] ?? evidence.approved_achievement_bullets?.[0] ?? evidence.source_title,
           gap_description: "This achievement could be stronger with specific numbers",
-          coach_question: `For "${truncate(evidence.achievement || evidence.title, 60)}" - can you add a specific number or percentage? For example, how many users, what percentage improvement, or what scale?`,
+          coach_question: `For "${truncate(evidence.outcomes?.[0] ?? evidence.approved_achievement_bullets?.[0] ?? evidence.source_title, 60)}" - can you add a specific number or percentage? For example, how many users, what percentage improvement, or what scale?`,
           can_proceed_without: true,
           suggested_action: "clarify",
         })
@@ -444,7 +446,7 @@ function isEvidenceRelevantToJob(
     tech_stack?: string[]
   }
 ): boolean {
-  const evidenceText = `${evidence.achievement || ""} ${evidence.title || ""} ${(evidence.skills_demonstrated || []).join(" ")}`.toLowerCase()
+  const evidenceText = `${evidence.outcomes?.[0] ?? ""} ${evidence.source_title || ""} ${(evidence.tools_used || []).join(" ")}`.toLowerCase()
   const jobKeywords = [...(jobAnalysis.keywords || []), ...(jobAnalysis.tech_stack || [])]
 
   return jobKeywords.some(kw => evidenceText.includes(kw.toLowerCase()))
@@ -480,19 +482,34 @@ function assessEducationCoverage(
   
   // Check education evidence in library
   const educationEvidence = evidenceLibrary.filter(e => e.source_type === "education")
-  const educationText = educationEvidence.map(e => e.source_title || e.role_name).join(", ")
+  const educationText = educationEvidence.map(e => e.source_title || e.role_name).filter(Boolean).join(", ")
   
-  // Case 1: User has qualifying degree from profile
-  // If user has Bachelor's and job requires Bachelor's (or lower), it's satisfied
-  if (requiredDegree && userDegrees.length > 0) {
-    if (meetsOrExceedsDegreeRequirement(userDegrees, requiredDegree)) {
-      const userHighest = userDegrees[0] // Already sorted by highest
-      const matchDesc = userHighest === requiredDegree 
+  // FIX 1: Extract degree levels directly from evidenceLibrary education records.
+  // Education rows parsed from a resume upload live in evidence_library, not in
+  // userProfile.education — so userDegrees alone is often empty. We normalize
+  // role_name (e.g. "Master of Science in Information Systems") into a DegreeLevel
+  // and merge with any degrees already on the profile.
+  const degreesFromEvidence: DegreeLevel[] = []
+  for (const e of educationEvidence) {
+    const text = [e.role_name, e.source_title].filter(Boolean).join(" ")
+    const level = normalizeDegreeLevel(text)
+    if (level && !degreesFromEvidence.includes(level)) {
+      degreesFromEvidence.push(level)
+    }
+  }
+  const allUserDegrees = [...new Set([...userDegrees, ...degreesFromEvidence])]
+
+  // Case 1: User has qualifying degree (from profile OR evidence library)
+  if (requiredDegree && allUserDegrees.length > 0) {
+    if (meetsOrExceedsDegreeRequirement(allUserDegrees, requiredDegree)) {
+      // FIX 2: Use getHighestDegree() — userDegrees is NOT pre-sorted
+      const userHighest = getHighestDegree(allUserDegrees) ?? allUserDegrees[0]
+      const matchDesc = userHighest === requiredDegree
         ? `You have the required ${requiredDegree}'s degree`
         : `Your ${userHighest}'s degree exceeds the ${requiredDegree}'s requirement`
       return {
         classification: "satisfied",
-        matchedEvidence: educationText || userDegrees.join(", "),
+        matchedEvidence: educationText || allUserDegrees.join(", "),
         description: matchDesc,
         requiredDegree,
       }
@@ -521,10 +538,12 @@ function assessEducationCoverage(
   }
   
   // Case 3: Has education evidence in library that might match (keyword overlap)
+  // FIX 3: Lowered word length threshold from > 4 to > 2 so short degree
+  // abbreviations ("PhD", "MS", "BS", "BA", "MBA") are included in matching.
   if (educationEvidence.length > 0) {
     const evidenceMatches = educationEvidence.some(e => {
-      const text = `${e.source_title} ${e.role_name}`.toLowerCase()
-      return reqLower.split(" ").some(word => word.length > 4 && text.includes(word))
+      const text = `${e.source_title ?? ""} ${e.role_name ?? ""}`.toLowerCase()
+      return reqLower.split(/\s+/).some(word => word.length > 2 && text.includes(word))
     })
     
     if (evidenceMatches) {
@@ -547,12 +566,14 @@ function assessEducationCoverage(
     }
   }
   
-  // Case 5: User has a degree but it doesn't match requirement level
-  if (userDegrees.length > 0 && requiredDegree) {
+  // Case 5: User has a degree but it doesn't meet the requirement level
+  // FIX 4: Use allUserDegrees (includes degrees extracted from evidenceLibrary)
+  if (allUserDegrees.length > 0 && requiredDegree) {
+    const highest = getHighestDegree(allUserDegrees) ?? allUserDegrees[0]
     return {
       classification: "ambiguous",
-      matchedEvidence: userDegrees.join(", "),
-      description: `You have ${userDegrees.join(", ")} - confirm if this satisfies "${requirement}"`,
+      matchedEvidence: educationText || allUserDegrees.join(", "),
+      description: `You have a ${highest}'s degree - confirm if this satisfies "${requirement}"`,
       requiredDegree,
     }
   }

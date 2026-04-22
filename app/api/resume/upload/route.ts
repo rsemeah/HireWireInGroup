@@ -10,15 +10,15 @@
  *   6. Map to evidence rows via lib/mapResumeToEvidence
  *   7. Deduplicate + insert / update evidence_library
  *   8. Return canonical summary
- *
- * source_resumes columns: user_id, file_name, parsed_text, file_type, 
- * parsed_data, parse_status, parsed_at, is_primary.
  */
 
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { parseResumeText } from "@/lib/resumeParser"
 import { mapResumeToEvidence, dedupeKey } from "@/lib/mapResumeToEvidence"
+import { extractEducationFromResumeText, buildEducationEvidenceRows } from "@/lib/resume/extractEducation"
+
+export const maxDuration = 60
 
 // Extract text from PDF
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
@@ -38,23 +38,16 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth — getUser() verifies JWT. Fall back to getSession() for sandbox/
-    // deprecated-middleware environments where tokens aren't refreshed.
-    let userId: string | undefined
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      userId = user.id
-    } else {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) userId = session.user.id
-    }
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    const userId = user.id
 
     // ── 1. Extract text ──────────────────────────────────────────────────────
     let rawText = ""
     let filename = "resume.txt"
+    let mimeType = "text/plain"
 
     const contentType = request.headers.get("content-type") ?? ""
 
@@ -65,6 +58,7 @@ export async function POST(request: NextRequest) {
 
       if (file) {
         filename = file.name
+        mimeType = file.type || "text/plain"
 
         if (file.size > 10 * 1024 * 1024) {
           return NextResponse.json({ error: "File too large. Maximum size is 10MB." }, { status: 400 })
@@ -88,11 +82,14 @@ export async function POST(request: NextRequest) {
         }
       } else if (textField) {
         rawText = textField
+        filename = "pasted_resume.txt"
+        mimeType = "text/plain"
       }
     } else if (contentType.includes("application/json")) {
       const body = await request.json()
       rawText = body.text ?? ""
       filename = body.filename ?? "resume.txt"
+      mimeType = "text/plain"
     }
 
     if (!rawText || rawText.trim().length < 50) {
@@ -106,7 +103,7 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         file_name: filename,
         parsed_text: rawText,
-        file_type: "text/plain",
+        file_type: mimeType,
         parse_status: "pending",
       })
       .select("id")
@@ -122,7 +119,7 @@ export async function POST(request: NextRequest) {
 
     const sourceResumeId = sourceResume.id
 
-    // ── 3. Parse via Claude ───────────────────────────────────────────────────
+    // ── 3. Parse via Claude ──────────────────────────────────────────────────
     let parsed
     try {
       parsed = await parseResumeText(rawText)
@@ -138,49 +135,82 @@ export async function POST(request: NextRequest) {
     // ── 4. Update source_resumes with parsed_data ────────────────────────────
     await supabase
       .from("source_resumes")
-      .update({ 
+      .update({
         parsed_data: parsed,
         parse_status: "completed",
         parsed_at: new Date().toISOString(),
       })
       .eq("id", sourceResumeId)
 
+    // ── 4b. Extract and insert education evidence rows ───────────────────────
+    const educationEntries = await extractEducationFromResumeText(rawText)
+
+    if (educationEntries.length > 0) {
+      const educationRows = buildEducationEvidenceRows(educationEntries, userId, sourceResumeId)
+
+      const { error: eduError } = await supabase
+        .from("evidence_library")
+        .upsert(
+          educationRows,
+          {
+            onConflict: "user_id,source_title,source_type",
+            ignoreDuplicates: false,
+          }
+        )
+
+      if (eduError) {
+        console.error("[resume/upload] Education evidence insert error:", eduError)
+      }
+    }
+    // ── End education injection ──────────────────────────────────────────────
+
     // ── 5. Pre-fill user_profile if fields are empty ─────────────────────────
     const { data: profile } = await supabase
       .from("user_profile")
-      .select("full_name, location, summary, skills, links, email, phone")
+      .select("full_name, location, summary, skills, email, phone")
       .eq("user_id", userId)
-      .single()
+      .maybeSingle()
 
     if (profile) {
       const updates: Record<string, unknown> = {}
       if (!profile.full_name && parsed.full_name) updates.full_name = parsed.full_name
       if (!profile.location && parsed.location) updates.location = parsed.location
       if (!profile.summary && parsed.summary) updates.summary = parsed.summary
-      if ((!profile.skills || profile.skills.length === 0)) {
+      if (!profile.skills || profile.skills.length === 0) {
         const allSkills = [...(parsed.skills ?? []), ...(parsed.tools ?? [])]
         if (allSkills.length > 0) updates.skills = allSkills
       }
       if (!profile.email && parsed.email) updates.email = parsed.email
       if (!profile.phone && parsed.phone) updates.phone = parsed.phone
-      // Write parsed links into user_profile_links (canonical table), not legacy JSONB
+
+      // Write parsed links into user_profile_links (canonical table)
       const linkCandidates: { link_type: string; url: string }[] = []
       if (parsed.linkedin_url) linkCandidates.push({ link_type: "linkedin", url: parsed.linkedin_url })
       if (parsed.github_url) linkCandidates.push({ link_type: "github", url: parsed.github_url })
       if (parsed.website_url) linkCandidates.push({ link_type: "website", url: parsed.website_url })
+
       if (linkCandidates.length > 0) {
         const { data: existingLinks } = await supabase
           .from("user_profile_links")
-          .select("link_type, url")
+          .select("link_type")
           .eq("user_id", userId)
         const existingTypes = new Set((existingLinks || []).map(l => l.link_type))
         const toInsert = linkCandidates
           .filter(l => !existingTypes.has(l.link_type))
-          .map(l => ({ user_id: userId, link_type: l.link_type, url: l.url, is_primary: true, source: "parsed_resume", parse_status: "pending" }))
+          .map(l => ({
+            user_id: userId,
+            link_type: l.link_type,
+            url: l.url,
+            is_primary: true,
+            is_user_approved: true,
+            source: "parsed_resume",
+            parse_status: "pending",
+          }))
         if (toInsert.length > 0) {
           await supabase.from("user_profile_links").insert(toInsert)
         }
       }
+
       if (Object.keys(updates).length > 0) {
         updates.updated_at = new Date().toISOString()
         await supabase.from("user_profile").update(updates).eq("user_id", userId)
@@ -188,7 +218,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 6. Map to evidence rows ──────────────────────────────────────────────
-    const candidateRows = mapResumeToEvidence(parsed)
+    // Education is handled by step 4b (extractEducation) which populates proof_snippet.
+    // Filter it out here to avoid duplicate rows with a different source_title format.
+    const candidateRows = mapResumeToEvidence(parsed).filter(r => r.source_type !== "education")
 
     if (candidateRows.length === 0) {
       return NextResponse.json({
@@ -259,12 +291,20 @@ export async function POST(request: NextRequest) {
     if (rowsToInsert.length > 0) {
       const { data: insertedData, error: evidenceError } = await supabase
         .from("evidence_library")
-        .insert(
+        .upsert(
           rowsToInsert.map((row) => ({
             ...row,
             user_id: userId,
             source_resume_id: sourceResumeId,
-          }))
+          })),
+          {
+            // ignoreDuplicates: true → ON CONFLICT DO NOTHING
+            // Client-side dedupeKey uses 5 fields; DB constraint is 3 (user_id,source_title,source_type).
+            // Rows that pass the client-side check but still conflict in the DB are silently skipped
+            // rather than throwing a 23505 / 409.
+            onConflict: "user_id,source_title,source_type",
+            ignoreDuplicates: true,
+          }
         )
         .select("id, source_type, source_title")
 
@@ -286,8 +326,8 @@ export async function POST(request: NextRequest) {
       inserted: inserted.length,
       updated: skillsToUpdate.length,
       skipped: skippedCount,
+      education_count: educationEntries.length,
       evidence: inserted.map((e) => ({ id: e.id, type: e.source_type, title: e.source_title })),
-      // Contact info for onboarding pre-fill
       full_name: parsed.full_name ?? null,
       location: parsed.location ?? null,
       summary: parsed.summary ?? null,
@@ -306,18 +346,13 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    let userId: string | undefined
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) { userId = user.id } else {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) userId = session.user.id
-    }
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: resumes, error } = await supabase
       .from("source_resumes")
       .select("id, file_name, parsed_text, parsed_data, created_at")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -336,13 +371,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    let userId: string | undefined
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) { userId = user.id } else {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) userId = session.user.id
-    }
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
     const resumeId = searchParams.get("id")
@@ -355,7 +385,7 @@ export async function DELETE(request: NextRequest) {
       .from("source_resumes")
       .delete()
       .eq("id", resumeId)
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
 
     if (error) {
       return NextResponse.json({ error: "Failed to delete resume" }, { status: 500 })
