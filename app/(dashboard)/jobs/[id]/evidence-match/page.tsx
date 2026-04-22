@@ -246,7 +246,8 @@ export default function EvidenceMatchPage() {
     ["phd", "ph.d", "doctorate", "doctoral"],
   ]
 
-  function getDegreeLevel(text: string): number {
+  function getDegreeLevel(text: string | null | undefined): number {
+    if (!text) return -1
     const lower = text.toLowerCase()
     for (let i = DEGREE_HIERARCHY.length - 1; i >= 0; i--) {
       if (DEGREE_HIERARCHY[i].some(d => lower.includes(d))) return i
