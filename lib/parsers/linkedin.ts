@@ -100,7 +100,7 @@ export const linkedinParser: JobParser = {
         metadata: {
           source: "LINKEDIN",
           externalJobId: extractLinkedInJobId(url),
-          companyHint: structuredData?.hiringOrganization?.name as string | undefined,
+          companyHint: (structuredData as Record<string, any>)?.hiringOrganization?.name as string | undefined,
         },
       }
     }

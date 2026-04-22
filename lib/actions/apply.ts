@@ -92,8 +92,7 @@ export async function applyToJob(
     .single()
   
   if (appError) {
-    // Log but don't fail - job is already marked
-    console.error("Failed to create application record:", appError)
+    return { success: false, error: `Failed to create application record: ${appError.message}` }
   }
   
   // Log audit event
@@ -116,33 +115,3 @@ export async function applyToJob(
   }
 }
 
-/**
- * Mark quality passed - only callable from Red Team
- * 
- * This creates audit trail for quality approval.
- */
-export async function markQualityPassed(
-  jobId: string,
-  notes?: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return { success: false, error: "Not authenticated" }
-  }
-  
-  // Log audit event for quality pass
-  await supabase.from("audit_events").insert({
-    user_id: user.id,
-    job_id: jobId,
-    event_type: "quality_passed",
-    outcome: "approved",
-    reason: notes || "Red Team review passed",
-    metadata: {
-      approved_at: new Date().toISOString(),
-    },
-  })
-  
-  return { success: true }
-}

@@ -101,6 +101,7 @@ export async function evaluateJobReadiness(
     `)
     .eq("id", jobId)
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .single()
   
   if (error || !job) {

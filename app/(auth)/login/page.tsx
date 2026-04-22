@@ -1,19 +1,16 @@
-"use client"
+'use client'
 
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { useState, Suspense } from "react"
-import { Loader2, Mail } from "lucide-react"
-import dynamic from "next/dynamic"
-import { WaitlistForm } from "@/components/waitlist-form"
+import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { Loader2, Mail } from 'lucide-react'
+import dynamic from 'next/dynamic'
 
-// Email/password inputs are loaded client-only to prevent hydration mismatch
-// caused by password manager extensions (LastPass, 1Password) injecting DOM elements
 const EmailInput = dynamic(
   () => Promise.resolve(({ value, onChange, disabled }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; disabled: boolean }) => (
     <Input
@@ -44,16 +41,15 @@ const PasswordInput = dynamic(
 )
 
 function LoginForm() {
-  // Use empty strings as defaults to prevent null/undefined warnings
-  const [email, setEmail] = useState<string>("")
-  const [password, setPassword] = useState<string>("")
+  const [email, setEmail] = useState<string>('')
+  const [password, setPassword] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isMagicLinkSent, setIsMagicLinkSent] = useState(false)
-  const [authMode, setAuthMode] = useState<"password" | "magic">("password")
+  const [authMode, setAuthMode] = useState<'password' | 'magic'>('password')
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get("redirect") || "/"
+  const redirectTo = searchParams.get('redirect') || '/dashboard'
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,7 +68,7 @@ function LoginForm() {
       if (error) throw error
       setIsMagicLinkSent(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to send magic link")
+      setError(err instanceof Error ? err.message : 'Failed to send magic link')
     } finally {
       setIsLoading(false)
     }
@@ -85,33 +81,18 @@ function LoginForm() {
     setError(null)
 
     try {
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      
       if (error) throw error
-      
-      // Check if user has completed onboarding
-      if (authData.user) {
-        const { data: profileData } = await supabase
-          .from("user_profile")
-          .select("onboarding_complete")
-          .eq("user_id", authData.user.id)
-          .maybeSingle()
-        
-        // Redirect to onboarding if no profile or not complete
-        if (!profileData?.onboarding_complete) {
-          router.push("/onboarding")
-          router.refresh()
-          return
-        }
+
+      if (data.user) {
+        router.push(redirectTo)
+        router.refresh()
       }
-      
-      router.push(redirectTo)
-      router.refresh()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Invalid email or password")
+      setError(err instanceof Error ? err.message : 'Invalid email or password')
     } finally {
       setIsLoading(false)
     }
@@ -124,7 +105,7 @@ function LoginForm() {
           <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
             <Mail className="h-6 w-6 text-green-600" />
           </div>
-          <CardTitle className="text-2xl font-serif">Check your email</CardTitle>
+          <CardTitle className="text-2xl font-semibold">Check your email</CardTitle>
           <CardDescription className="text-base">
             We sent a magic link to <strong>{email}</strong>
           </CardDescription>
@@ -133,14 +114,10 @@ function LoginForm() {
           <p className="text-sm text-muted-foreground text-center">
             Click the link in your email to sign in. The link expires in 1 hour.
           </p>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              setIsMagicLinkSent(false)
-              setEmail("")
-            }}
-          >
+          <Button variant="outline" className="w-full" onClick={() => {
+            setIsMagicLinkSent(false)
+            setEmail('')
+          }}>
             Use a different email
           </Button>
         </CardContent>
@@ -151,12 +128,11 @@ function LoginForm() {
   return (
     <Card className="border-0 shadow-none lg:border lg:shadow-sm">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-serif">Welcome back</CardTitle>
-        <CardDescription>Sign in to your HireWire account</CardDescription>
+        <CardTitle className="text-2xl font-semibold">Welcome back</CardTitle>
+        <CardDescription>Sign in to your account</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Email Auth - Inputs use dynamic import with ssr:false to prevent hydration mismatch from password manager extensions */}
-        <form onSubmit={authMode === "magic" ? handleMagicLink : handlePasswordLogin}>
+        <form onSubmit={authMode === 'magic' ? handleMagicLink : handlePasswordLogin}>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -167,7 +143,7 @@ function LoginForm() {
               />
             </div>
 
-            {authMode === "password" && (
+            {authMode === 'password' && (
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <PasswordInput
@@ -188,12 +164,12 @@ function LoginForm() {
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {authMode === "magic" ? "Sending link..." : "Signing in..."}
+                  {authMode === 'magic' ? 'Sending link...' : 'Signing in...'}
                 </>
-              ) : authMode === "magic" ? (
-                "Send magic link"
+              ) : authMode === 'magic' ? (
+                'Send magic link'
               ) : (
-                "Log in"
+                'Log in'
               )}
             </Button>
           </div>
@@ -202,21 +178,17 @@ function LoginForm() {
         <button
           type="button"
           className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
-          onClick={() => setAuthMode(authMode === "magic" ? "password" : "magic")}
+          onClick={() => setAuthMode(authMode === 'magic' ? 'password' : 'magic')}
         >
-          {authMode === "magic" ? "Log in with password" : "Log in with magic link"}
+          {authMode === 'magic' ? 'Log in with password' : 'Log in with magic link'}
         </button>
 
         <p className="text-center text-sm text-muted-foreground">
-          New to HireWire?{" "}
+          New here?{' '}
           <Link href="/signup" className="font-semibold text-primary hover:underline">
             Create an account
           </Link>
         </p>
-        
-        <div className="pt-4 border-t">
-          <WaitlistForm source="login_page" />
-        </div>
       </CardContent>
     </Card>
   )

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Playfair_Display, JetBrains_Mono } from 'next/font/google'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { UserProvider } from '@/components/user-provider'
@@ -7,35 +7,25 @@ import { PostHogProvider } from '@/components/posthog-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const inter = Inter({ 
-  subsets: ["latin"],
+const inter = Inter({
+  subsets: ['latin'],
   variable: '--font-inter',
 })
 
-const playfair = Playfair_Display({ 
-  subsets: ["latin"],
-  variable: '--font-playfair',
-})
-
-const jetbrains = JetBrains_Mono({ 
-  subsets: ["latin"],
+const jetbrains = JetBrains_Mono({
+  subsets: ['latin'],
   variable: '--font-jetbrains',
 })
 
 export const metadata: Metadata = {
-  title: 'HireWire - Know Before You Apply',
-  description: 'A premium job application engine that scores opportunities, generates tailored materials, and tracks your pipeline.',
-  icons: {
-    icon: '/hirewire-icon.png',
-    apple: '/hirewire-icon.png',
-  },
+  title: 'App Shell',
+  description: 'Framework-only application shell with auth and infrastructure wiring.',
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#BD0A0A',
 }
 
 export default function RootLayout({
@@ -44,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${playfair.variable} ${jetbrains.variable} bg-background`}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrains.variable} bg-background`}>
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"

@@ -549,7 +549,7 @@ This should fit on one page and be scannable in under 1 minute.
 
     // Upsert to database
     if (existingPrep) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("interview_prep")
         .update({
           ...interviewPrep,
@@ -557,8 +557,11 @@ This should fit on one page and be scannable in under 1 minute.
         })
         .eq("id", existingPrep.id)
         .eq("user_id", user.id)
+      if (updateError) {
+        throw new Error(`Failed to update interview prep: ${updateError.message}`)
+      }
     } else {
-      await supabase
+      const { error: insertError } = await supabase
         .from("interview_prep")
         .insert({
           user_id: user.id,
@@ -566,6 +569,9 @@ This should fit on one page and be scannable in under 1 minute.
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
+      if (insertError) {
+        throw new Error(`Failed to insert interview prep: ${insertError.message}`)
+      }
     }
 
     // Fetch the saved record

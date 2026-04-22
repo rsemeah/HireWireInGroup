@@ -107,7 +107,7 @@ export function extractKnownProducts(evidence: EvidenceRecord[]): KnownProduct[]
             ? ev.source_url 
             : undefined,
           github: ev.source_url?.includes("github") ? ev.source_url : undefined,
-          role: ev.role_name,
+          role: ev.role_name ?? undefined,
           techStack: [...(ev.tools_used || []), ...(ev.systems_used || [])],
           evidenceIds: [ev.id],
           confidence: "explicit",
@@ -128,7 +128,7 @@ export function extractKnownProducts(evidence: EvidenceRecord[]): KnownProduct[]
             ? ev.source_url 
             : undefined,
           github: ev.source_url?.includes("github") ? ev.source_url : undefined,
-          role: ev.role_name,
+          role: ev.role_name ?? undefined,
           techStack: [...(ev.tools_used || []), ...(ev.systems_used || [])],
           evidenceIds: [ev.id],
           confidence: "inferred",
@@ -428,8 +428,8 @@ export function buildProfileKnowledge(
       if (!existing) {
         knowledge.companies.push({
           name: ev.company_name,
-          role: ev.role_name,
-          context: ev.business_goal,
+          role: ev.role_name ?? undefined,
+          context: ev.business_goal ?? undefined,
         })
       }
     }
@@ -465,7 +465,7 @@ export function buildProfileKnowledge(
         knowledge.repos.push({
           name: extractRepoName(ev.source_url),
           url: ev.source_url,
-          project: ev.project_name,
+          project: ev.project_name ?? undefined,
         })
       } else if (ev.source_url.includes("http")) {
         knowledge.websites.push({

@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  * Accept client as parameter for testability.
  */
 
-type AnySupabaseClient = SupabaseClient<unknown, string, unknown>
+type AnySupabaseClient = SupabaseClient<any, any, any>
 
 /**
  * Find existing job by URL for a user.

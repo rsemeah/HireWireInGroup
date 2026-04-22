@@ -72,3 +72,5 @@ export function parseJobPage(html: string, url: string): ParsedJobContent {
   const parser = getParser(source)
   return parser.parse(html, url)
 }
+
+export type { JobSource } from "@/lib/schemas/job-intake"

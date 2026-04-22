@@ -1,30 +1,45 @@
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { Topbar } from "@/components/topbar"
-import { CoachBubble } from "@/components/coach-bubble"
-import { PremiumProvider } from "@/hooks/use-premium"
-import { UpgradeModal } from "@/components/upgrade-modal"
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
   return (
-    <PremiumProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-          <Topbar />
-          <main className="flex-1 overflow-auto p-6">
-            {children}
-          </main>
-        </SidebarInset>
-        {/* Floating AI Coach bubble - appears on all dashboard pages */}
-        <CoachBubble />
-        {/* Global upgrade modal */}
-        <UpgradeModal />
-      </SidebarProvider>
-    </PremiumProvider>
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-semibold tracking-tight">HireWire</span>
+            </div>
+            <nav className="flex items-center gap-6 text-sm text-muted-foreground">
+              <a href="/dashboard" className="hover:text-foreground transition-colors">
+                Dashboard
+              </a>
+              <a href="/jobs" className="hover:text-foreground transition-colors">
+                Jobs
+              </a>
+              <a href="/profile" className="hover:text-foreground transition-colors">
+                Profile
+              </a>
+            </nav>
+          </div>
+        </div>
+      </header>
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
+    </div>
   )
 }

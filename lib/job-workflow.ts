@@ -99,7 +99,7 @@ export function deriveWorkflowStage(job: Job | null): WorkflowStage {
   if (!job) return "job_ingested"
   
   // Check applied status first (terminal state)
-  if (job.status === "applied" || job.status === "APPLIED") {
+  if (job.status === "applied") {
     return "applied"
   }
   
@@ -144,7 +144,7 @@ export function getWorkflowState(job: Job | null, jobId?: string): WorkflowState
     scored: hasPersistedScore(job),
     materialsGenerated: hasGeneratedMaterials(job),
     qualityPassed: hasQualityPass(job),
-    applied: job?.status === "applied" || job?.status === "APPLIED",
+    applied: job?.status === "applied",
   }
   
   const blockers = getBlockers(job, progress)
@@ -170,16 +170,14 @@ export function getWorkflowState(job: Job | null, jobId?: string): WorkflowState
  */
 export function hasJobAnalysis(job: Job | null): boolean {
   if (!job) return false
-  
-  // Check for job description (indicates parsing happened)
-  if (!job.job_description && !job.raw_description) return false
-  
-  // Check for extracted requirements
-  const hasRequirements = 
-    (job.qualifications_required && job.qualifications_required.length > 0) ||
-    (job.responsibilities && job.responsibilities.length > 0)
-  
-  return !!job.job_description || hasRequirements
+
+  // True signal: AI extraction produced requirements (written to job_analyses, flattened by getJobById).
+  // job_description alone is raw scraped text — it proves the page was fetched, not that
+  // requirements were successfully extracted. Do not use it as a gate signal.
+  return (
+    ((job.qualifications_required?.length ?? 0) > 0) ||
+    ((job.responsibilities?.length ?? 0) > 0)
+  )
 }
 
 /**
@@ -249,11 +247,7 @@ export function hasQualityPass(job: Job | null): boolean {
   
   // No quality issues means pass
   if (job.generation_quality_issues && job.generation_quality_issues.length === 0) return true
-  if (job.quality_issues && job.quality_issues.length === 0) return true
-  
-  // If materials exist but no quality check has been run, allow proceeding
-  // (quality check is optional for V1)
-  if (hasGeneratedMaterials(job) && job.quality_passed === null) return true
+  if (job.generation_quality_issues && job.generation_quality_issues.length === 0) return true
   
   return false
 }

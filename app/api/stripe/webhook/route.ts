@@ -111,7 +111,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   let currentPeriodEnd: string | null = null
   if (subscriptionId) {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-    currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString()
+    currentPeriodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString()
   }
 
   // Update users table
@@ -178,7 +178,7 @@ async function updateUserSubscription(userId: string, subscription: Stripe.Subsc
     : subscription.status
 
   const planType = status === "active" ? "pro" : "free"
-  const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString()
+  const currentPeriodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString()
 
   await supabaseAdmin
     .from("users")
@@ -254,9 +254,10 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
  * Handle failed payment — mark as past_due
  */
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-  const subscriptionId = typeof invoice.subscription === "string"
-    ? invoice.subscription
-    : invoice.subscription?.id
+  const inv = invoice as unknown as { subscription?: string | { id?: string } | null }
+  const subscriptionId = typeof inv.subscription === "string"
+    ? inv.subscription
+    : inv.subscription?.id
 
   if (!subscriptionId) return
 

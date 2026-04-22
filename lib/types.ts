@@ -47,56 +47,6 @@ export interface ResumeTemplateConfig {
 }
 
 // ============================================================================
-// JOB STATUS (Pipeline Status - UPPERCASE for consistency)
-// ============================================================================
-
-export type JobStatus = 
-  | "NEW"              // Just added, not yet analyzed
-  | "ANALYZING"        // Currently being analyzed
-  | "SCORED"           // Analyzed and scored, ready for document generation
-  | "REVIEWING"        // User is reviewing evidence mapping
-  | "GENERATING"       // Documents being generated
-  | "READY"            // Documents ready, can apply
-  | "APPLIED"          // Application submitted
-  | "INTERVIEWING"     // Interview process ongoing
-  | "OFFERED"          // Received job offer
-  | "REJECTED"         // Application rejected
-  | "WITHDRAWN"        // User withdrew application
-  | "ERROR"            // Processing error
-
-// Helper to normalize status values from database
-export function normalizeJobStatus(status: string | null): JobStatus {
-  if (!status) return "NEW"
-  const upper = status.toUpperCase().replace(/_/g, "").replace(/-/g, "")
-  
-  // Map various formats to canonical values
-  const statusMap: Record<string, JobStatus> = {
-    "NEW": "NEW",
-    "ANALYZING": "ANALYZING",
-    "SCORED": "SCORED",
-    "REVIEWING": "REVIEWING",
-    "GENERATING": "GENERATING",
-    "READY": "READY",
-    "READYTOAPPLY": "READY",
-    "READY_TO_APPLY": "READY",
-    "MANUALREVIEWREQUIRED": "REVIEWING",
-    "MANUAL_REVIEW_REQUIRED": "REVIEWING",
-    "NEEDSREVIEW": "REVIEWING",
-    "NEEDS_REVIEW": "REVIEWING",
-    "APPLIED": "APPLIED",
-    "INTERVIEWING": "INTERVIEWING",
-    "INTERVIEW": "INTERVIEWING",
-    "OFFERED": "OFFERED",
-    "REJECTED": "REJECTED",
-    "WITHDRAWN": "WITHDRAWN",
-    "ERROR": "ERROR",
-    "FAILED": "ERROR",
-  }
-  
-  return statusMap[upper] || "NEW"
-}
-
-// ============================================================================
 // GENERATION STATUS (Document Generation - lowercase for consistency with DB)
 // ============================================================================
 
@@ -251,7 +201,7 @@ export interface Job {
   title: string
   company: string
   source: JobSource
-  source_url: string | null
+  job_url: string | null
   
   // Lifecycle state
   status: JobStatus
@@ -275,7 +225,7 @@ export interface Job {
   location?: string | null
   salary_range?: string | null
   employment_type?: string | null
-  raw_description?: string | null
+  job_description?: string | null
   responsibilities?: string[] | null
   qualifications_required?: string[] | null
   qualifications_preferred?: string[] | null

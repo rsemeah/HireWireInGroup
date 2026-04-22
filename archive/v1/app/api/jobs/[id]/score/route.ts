@@ -31,9 +31,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     .eq("id", jobId)
     .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .select("id")
 
   if (jobResult.error) {
     return NextResponse.json({ success: false, error: jobResult.error.message }, { status: 500 })
+  }
+
+  // Guard: if the update matched 0 rows the job is deleted or not owned.
+  // Without this check, job_scores would be upserted as an orphan record.
+  if (!jobResult.data || jobResult.data.length === 0) {
+    return NextResponse.json({ success: false, error: "Job not found" }, { status: 404 })
   }
 
   const scoreResult = await supabase

@@ -1,0 +1,74 @@
+/**
+ * POST /api/coach/evidence-drafts/[draftId]/confirm
+ * Confirms a draft → inserts into evidence_library, marks draft confirmed.
+ * Body: { proofSnippet?: string } (optional user edit)
+ */
+import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ draftId: string }> }
+) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userId = user.id
+    const { draftId } = await params
+
+    let userEditedSnippet: string | null = null
+    try {
+      const body = await request.json()
+      userEditedSnippet = body.proofSnippet ?? null
+    } catch { /* body is optional */ }
+
+    const { data: draft } = await supabase.from("coach_evidence_drafts")
+      .select("id,source_title,source_type,proof_snippet,confidence_level,skills,status")
+      .eq("id", draftId).eq("user_id", userId).maybeSingle()
+
+    if (!draft) return NextResponse.json({ success: false, error: "not_found" }, { status: 404 })
+    if (draft.status !== "pending") {
+      return NextResponse.json(
+        { success: false, error: "already_processed", user_message: `Draft already ${draft.status}.` },
+        { status: 400 }
+      )
+    }
+
+    const finalSnippet = userEditedSnippet ?? draft.proof_snippet
+
+    const { data: evidenceRow, error: evidenceError } = await supabase
+      .from("evidence_library")
+      .insert({
+        user_id: userId,
+        source_type: draft.source_type,
+        source_title: draft.source_title,
+        proof_snippet: finalSnippet,
+        confidence_level: draft.confidence_level,
+        tools_used: Array.isArray(draft.skills) ? draft.skills : [],
+        is_active: true,
+        raw_resume_section: "coach",
+        confidence_score: 0.9,
+      })
+      .select("id").single()
+
+    if (evidenceError || !evidenceRow) {
+      return NextResponse.json(
+        { success: false, error: "insert_failed", user_message: "Failed to save evidence." },
+        { status: 500 }
+      )
+    }
+
+    await supabase.from("coach_evidence_drafts")
+      .update({ status: "confirmed", confirmed_row_id: evidenceRow.id, proof_snippet: finalSnippet })
+      .eq("id", draftId).eq("user_id", userId)
+
+    return NextResponse.json({ success: true, evidenceId: evidenceRow.id })
+  } catch (error) {
+    console.error("[coach/confirm] Error:", error)
+    return NextResponse.json(
+      { success: false, error: "server_error", user_message: "Something went wrong." },
+      { status: 500 }
+    )
+  }
+}

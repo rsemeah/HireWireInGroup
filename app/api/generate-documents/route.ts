@@ -346,15 +346,16 @@ export async function POST(request: NextRequest) {
     // Set status to 'generating' immediately
     await supabase
       .from("jobs")
-      .update({ 
+      .update({
         status: "generating",
         generation_status: "generating",
         generation_error: null,
         generation_attempts: _retry_count + 1,
-        last_generation_at: new Date().toISOString()
+        last_generation_at: new Date().toISOString(),
       })
       .eq("id", job_id)
       .eq("user_id", userId)
+      .is("deleted_at", null)
 
     // Load all required data in parallel
     const [profile, allEvidence, jobData, sourceResume] = await Promise.all([
@@ -375,10 +376,10 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", job_id)
         .eq("user_id", userId)
-      
+
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: "evidence_required",
           user_message: "No evidence found in your library. Please upload a resume or add evidence manually before generating materials."
         },
@@ -398,10 +399,10 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", job_id)
         .eq("user_id", userId)
-      
+
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: "profile_required",
           user_message: "Please complete your profile or upload a resume before generating materials."
         },
@@ -428,14 +429,7 @@ export async function POST(request: NextRequest) {
     const matchingComplete = evidenceMap?.matching_complete === true
     
     if (hasRequirements && !matchingComplete) {
-      await supabase
-        .from("jobs")
-        .update({
-          generation_status: "failed",
-          generation_error: "matching_incomplete",
-        })
-        .eq("id", job_id)
-        .eq("user_id", userId)
+      // No status update needed here — job remains in current state until matching is complete
       
       return NextResponse.json(
         { 
@@ -474,6 +468,8 @@ export async function POST(request: NextRequest) {
     // Use source resume parsed data when profile data is incomplete
     const sourceResumeData = sourceResume?.parsed_data as {
       full_name?: string;
+      email?: string;
+      phone?: string;
       location?: string;
       summary?: string;
       skills?: string[];
@@ -598,9 +594,9 @@ ${jobAnalysis.qualifications_preferred.map((q: string) => `- ${q}`).join("\n")}`
 
 ${jobAnalysis?.keywords?.length ? `Important Keywords: ${jobAnalysis.keywords.join(", ")}` : ""}
 ${jobAnalysis?.ats_phrases?.length ? `ATS Phrases to Include: ${jobAnalysis.ats_phrases.join(", ")}` : ""}
-${!jobAnalysis && jobData.raw_description ? `
+${!jobAnalysis && jobData.job_description ? `
 Full Job Description (manually entered — extract responsibilities and keywords from this):
-${(jobData.raw_description as string).slice(0, 3000)}` : ""}
+${(jobData.job_description as string).slice(0, 3000)}` : ""}
 ${gapClarifications.length > 0 ? `
 
 ADDITIONAL CONTEXT FROM CANDIDATE (use this to address identified gaps):
@@ -756,8 +752,8 @@ Write 5-8 achievement bullets that the candidate could confidently discuss in an
       })),
       {
         full_name: effectiveName,
-        email: profile?.email || sourceResumeData?.email || "",
-        phone: profile?.phone || sourceResumeData?.phone || "",
+        email: (profile as any)?.email || sourceResumeData?.email || "",
+        phone: (profile as any)?.phone || sourceResumeData?.phone || "",
         location: effectiveLocation,
         summary: effectiveSummary,
         skills: effectiveSkills,
@@ -808,8 +804,8 @@ TONE: Write like a sharp professional sending a letter to someone they respect.
   const coverLetterWithProvenance = coverLetterResult.experimental_output!
 
     // Build final formatted documents - Premium Clean Minimalist format
-  const effectiveEmail = profile?.email || sourceResumeData?.email || ""
-  const effectivePhone = profile?.phone || sourceResumeData?.phone || ""
+  const effectiveEmail = (profile as any)?.email || sourceResumeData?.email || ""
+  const effectivePhone = (profile as any)?.phone || sourceResumeData?.phone || ""
   const contactInfo = [
   effectiveLocation,
   effectiveEmail,
@@ -1034,10 +1030,10 @@ If no issues found, return empty arrays and overall_passed: true.`,
 blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title: e.source_title, reason: getEvidenceUsageRule(e) }))
         },
         status: qualityPassed ? "ready" : "needs_review",
-        scored_at: new Date().toISOString(),
-        generation_timestamp: new Date().toISOString(),
         generation_status: qualityPassed ? "ready" : "needs_review",
         generation_error: null,
+        scored_at: new Date().toISOString(),
+        generation_timestamp: new Date().toISOString(),
         generation_quality_score: qualityScore,
     generation_quality_issues: [
       ...allBannedPhrases.map(p => `Banned phrase: "${p}"`),
@@ -1061,32 +1057,34 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
 
     if (updateError) {
       console.error("Error updating job:", updateError)
+      return NextResponse.json(
+        { success: false, error: "Failed to persist generated documents. Please try again." },
+        { status: 500 }
+      )
     }
-    
+
     // Increment generations_this_month for usage tracking (only on successful generation)
-    // This enforces free tier limits and tracks premium usage
+    // generations_this_month and usage_reset_at live on the users table, not user_profile
     if (!updateError) {
       const now = new Date()
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-      
-      // Get current profile to check/reset usage
-      const { data: profile } = await supabase
-        .from("user_profile")
+
+      const { data: userData } = await supabase
+        .from("users")
         .select("generations_this_month, usage_reset_at")
-        .eq("user_id", userId)
+        .eq("id", userId)
         .maybeSingle()
-      
-      // Reset counter if we're in a new month
-      const needsReset = !profile?.usage_reset_at || 
-        new Date(profile.usage_reset_at) < new Date(firstOfMonth)
-      
+
+      const needsReset = !userData?.usage_reset_at ||
+        new Date(userData.usage_reset_at) < new Date(firstOfMonth)
+
       await supabase
-        .from("user_profile")
+        .from("users")
         .update({
-          generations_this_month: needsReset ? 1 : (profile?.generations_this_month || 0) + 1,
-          usage_reset_at: needsReset ? firstOfMonth : profile?.usage_reset_at,
+          generations_this_month: needsReset ? 1 : (userData?.generations_this_month || 0) + 1,
+          usage_reset_at: needsReset ? firstOfMonth : userData?.usage_reset_at,
         })
-        .eq("user_id", userId)
+        .eq("id", userId)
     }
 
     // Update job analysis with matched evidence
@@ -1141,7 +1139,7 @@ blocked_evidence: blockedEvidence.map((e: EvidenceRecord) => ({ id: e.id, title:
       provenance: {
         bullet_provenance: bulletProvenance,
         paragraph_provenance: paragraphProvenance,
-        blocked_evidence: blockedEvidence.map((e: { id: string; source_title: string }) => ({ id: e.id, title: e.source_title, reason: getEvidenceUsageRule(e) }))
+        blocked_evidence: blockedEvidence.map((e: { id: string; source_title: string }) => ({ id: e.id, title: e.source_title, reason: getEvidenceUsageRule(e as unknown as import('@/lib/types').EvidenceRecord) }))
       },
       quality_check: {
         passed: qualityPassed,

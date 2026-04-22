@@ -1,8 +1,8 @@
 # HireWire v0 Alignment Prompt
 ## Canonical Contract for Every v0 Build Session
 
-**Version**: 1.1.0
-**Last Updated**: 2026-04-12
+**Version**: 1.2.0
+**Last Updated**: 2026-04-13
 
 ---
 
@@ -176,6 +176,37 @@ No page, component, or API route may compute its own readiness logic.
 No component may locally derive whether a job "can generate" or "can apply".
 Call the readiness engine. Trust its output.
 
+### 11. Profile Links — Canonical Storage and CRUD Path
+
+External profile links (LinkedIn, GitHub, Portfolio, Website, Other) are stored
+in `user_profile_links`. This is the live canonical table — not `user_profile.links` JSONB.
+
+**CRUD path**: `lib/actions/profile-links.ts` server actions only.
+
+- `getProfileLinks()` — read all links for user
+- `addProfileLink({ link_type, url, label? })` — create with URL validation
+- `updateProfileLink({ id, url?, label?, link_type? })` — update own link
+- `removeProfileLink(id)` — delete own link
+- `setPrimaryLink(id)` — set is_primary true (trigger handles unset on others)
+
+**Rules that must be enforced:**
+
+- Multiple links per type are allowed
+- One `is_primary = true` per link_type per user
+- URL must pass `isValidUrl()` before insert or update
+- Duplicate exact URLs must be blocked before insert
+- No link write may go through `/api/profile` POST
+- `/api/profile` handles `user_profile` core fields only (name, title, email, etc.)
+
+**What `user_profile.links` JSONB is:**
+Legacy column. Contains migration fodder from old scalar URL fields.
+`migrateLegacyLinks()` in `profile-links.ts` reads it to backfill `user_profile_links`.
+Do not write to `user_profile.links`. Do not read it as live link truth.
+
+**Scalar URL fields (`linkedin_url`, `github_url`, `website_url`):**
+Still written by `/api/profile` for backward compatibility. Treated as migration source only.
+Do not add new consumers that read these as the primary link source.
+
 ---
 
 ## Live Schema Quick Reference
@@ -185,8 +216,8 @@ Call the readiness engine. Trust its output.
 | Table | Critical Columns | Always Filter |
 |---|---|---|
 | `jobs` | `generated_resume`, `generated_cover_letter`, `quality_passed`, `evidence_map`, `deleted_at` | `user_id` + `deleted_at IS NULL` |
-| `user_profile` | `links(jsonb)` — **legacy, do not write**, `education(jsonb)`, `experience(jsonb)`, `skills[]` | `user_id` |
-| `user_profile_links` | `link_type`, `url`, `is_primary`, `label`, `source`, `parse_status` | `user_id` |
+| `user_profile` | `education(jsonb)`, `experience(jsonb)`, `skills[]` — core professional identity | `user_id` |
+| `user_profile_links` | `link_type`, `url`, `is_primary`, `label`, `source`, `parse_status` — **canonical link storage** | `user_id` |
 | `job_analyses` | `qualifications_required`, `qualifications_preferred`, `keywords` | `user_id` |
 | `job_scores` | `overall_score`, `skills_match`, `experience_relevance` | via jobs RLS subquery |
 | `evidence_library` | `source_type`, `outcomes[]`, `tools_used[]`, `is_active` | `user_id` |

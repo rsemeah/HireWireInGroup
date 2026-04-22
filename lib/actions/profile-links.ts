@@ -119,6 +119,7 @@ export async function addProfileLink(input: AddLinkInput): Promise<{
         url: input.url.trim(),
         label: input.label?.trim() || null,
         is_primary: input.is_primary ?? false,
+        is_user_approved: true,
         source: "user_input",
         parse_status: "pending",
       })

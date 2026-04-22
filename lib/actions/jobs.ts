@@ -189,8 +189,8 @@ export async function analyzeAndGenerateForJob(url: string): Promise<
   | {
       success: true
       job: Job
-      analysis: AnalyzeJobResult["success"] extends true ? AnalyzeJobResult["analysis"] : never
-      generation: GenerateDocumentsResult["success"] extends true ? Omit<GenerateDocumentsResult, "success"> : null
+      analysis: Extract<AnalyzeJobResult, { success: true }>["analysis"]
+      generation: Record<string, unknown> | null
       duplicate: boolean
     }
   | { success: false; error: string }
@@ -244,7 +244,7 @@ export async function analyzeAndGenerateForJob(url: string): Promise<
       ? {
           job_id: result.job_id,
           evidence_map: {
-            fit_score: (result.job as Record<string, unknown>)?.score as number || 0,
+            fit_score: (result.job as unknown as Record<string, unknown>)?.score as number || 0,
             matched_skills: [],
             matched_tools: result.analysis?.tech_stack || [],
             gaps: [],
@@ -252,7 +252,7 @@ export async function analyzeAndGenerateForJob(url: string): Promise<
           generated_resume: result.job.generated_resume as string,
           generated_cover_letter: (result.job.generated_cover_letter as string) || "",
           quality_check: {
-            passed: (result.job as Record<string, unknown>)?.quality_passed as boolean || false,
+            passed: (result.job as unknown as Record<string, unknown>)?.quality_passed as boolean || false,
             issues: { invented_claims: [], vague_bullets: [], ai_filler: [] },
             suggestions: [],
           },
@@ -338,7 +338,7 @@ export async function getJobs(): Promise<JobsResult> {
     }
 
     // Transform data for UI compatibility
-    const transformedData = (data || []).map(transformJobForUI)
+    const transformedData = (data || []).map(transformJobForUI) as unknown as Job[]
     return { success: true, data: transformedData }
   } catch (err) {
     console.error("Connection error:", err)
@@ -400,9 +400,10 @@ export async function getJobById(id: string): Promise<Job | null> {
     return null
   }
 
+  const d = data as unknown as Record<string, unknown>
   // Transform to UI-expected format
-  const scores = (data.job_scores as Array<Record<string, unknown>>) || []
-  const analyses = (data.job_analyses as Array<Record<string, unknown>>) || []
+  const scores = (d.job_scores as Array<Record<string, unknown>>) || []
+  const analyses = (d.job_analyses as Array<Record<string, unknown>>) || []
   const score = scores[0]?.overall_score as number | null ?? null
   const analysis = analyses[0] || {}
 
@@ -415,32 +416,32 @@ export async function getJobById(id: string): Promise<Job | null> {
   }
 
   return {
-    ...data,
+    ...(d as unknown as Job),
     // Map normalized columns to legacy names for UI compatibility
-    title: data.role_title || analysis.title || data.title,
-    company: data.company_name || analysis.company || data.company,
+    title: d.role_title as string || analysis.title || d.title as string,
+    company: d.company_name as string || analysis.company || d.company as string,
     score,
     fit,
     // Score details
     score_strengths: [],
     score_gaps: analysis.known_gaps || [],
     // Canonical document content — jobs columns are the source of truth
-    generated_resume: (data.generated_resume as string | null) || null,
-    generated_cover_letter: (data.generated_cover_letter as string | null) || null,
+    generated_resume: (d.generated_resume as string | null) || null,
+    generated_cover_letter: (d.generated_cover_letter as string | null) || null,
     // Analysis data (flatten for backwards compatibility)
-    location: analysis.location || data.location,
-    salary_range: analysis.salary_text || data.salary_range,
-    employment_type: analysis.employment_type || data.employment_type,
+    location: analysis.location || d.location,
+    salary_range: analysis.salary_text || d.salary_range,
+    employment_type: analysis.employment_type || d.employment_type,
     responsibilities: analysis.responsibilities || [],
     qualifications_required: analysis.qualifications_required || [],
     qualifications_preferred: analysis.qualifications_preferred || [],
     ats_keywords: analysis.ats_phrases || analysis.keywords || [],
     // Keep original for components that use them
-    role_title: data.role_title,
-    company_name: data.company_name,
+    role_title: d.role_title as string | null,
+    company_name: d.company_name as string | null,
     job_scores: scores,
     job_analyses: analyses,
-  } as Job
+  } as unknown as Job
 }
 
 export async function updateJobStatus(

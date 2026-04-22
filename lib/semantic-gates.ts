@@ -381,13 +381,21 @@ export function canMarkApplied(job: Job | null): GateResult {
   }
   
   if (!hasGeneratedMaterials(job)) {
-    return { 
-      allowed: false, 
-      reason: "Generate materials before marking as applied", 
-      severity: "warning" 
+    return {
+      allowed: false,
+      reason: "Generate materials before marking as applied",
+      severity: "warning"
     }
   }
-  
+
+  if (!hasQualityPass(job)) {
+    return {
+      allowed: false,
+      reason: "Complete Red Team review before marking as applied",
+      severity: "warning",
+    }
+  }
+
   return { allowed: true }
 }
 

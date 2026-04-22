@@ -1,0 +1,85 @@
+/**
+ * POST /api/coach/sessions
+ * Create a new coach session or resume an existing active one.
+ * Body: { jobId, gapRequirement, gapRequirementId? }
+ */
+import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { buildOpeningPrompt } from "@/lib/coach/buildCoachPrompt"
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userId = user.id
+
+    const body = await request.json()
+    const { jobId, gapRequirement, gapRequirementId } = body
+    if (!jobId || !gapRequirement) {
+      return NextResponse.json(
+        { success: false, error: "missing_fields", user_message: "jobId and gapRequirement are required." },
+        { status: 400 }
+      )
+    }
+
+    const { data: existing } = await supabase
+      .from("coach_sessions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("job_id", jobId)
+      .eq("gap_requirement", gapRequirement)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existing) {
+      const [msgs, drafts] = await Promise.all([
+        supabase.from("coach_messages").select("id,role,content,created_at")
+          .eq("session_id", existing.id).order("created_at", { ascending: true }),
+        supabase.from("coach_evidence_drafts").select("id,source_title,source_type,proof_snippet,confidence_level,skills,status,created_at")
+          .eq("session_id", existing.id).eq("status", "pending"),
+      ])
+      return NextResponse.json({
+        sessionId: existing.id, isNew: false,
+        messages: Array.isArray(msgs.data) ? msgs.data : [],
+        pendingDrafts: Array.isArray(drafts.data) ? drafts.data : [],
+      })
+    }
+
+    const { data: newSession, error: sessionError } = await supabase
+      .from("coach_sessions")
+      .insert({ user_id: userId, job_id: jobId, gap_requirement: gapRequirement,
+        gap_requirement_id: gapRequirementId ?? null, status: "active" })
+      .select("id").single()
+
+    if (sessionError || !newSession) {
+      return NextResponse.json(
+        { success: false, error: "session_create_failed", user_message: "Failed to create session." },
+        { status: 500 }
+      )
+    }
+
+    const { data: job } = await supabase.from("jobs").select("role_title,company_name")
+      .eq("id", jobId).eq("user_id", userId).maybeSingle()
+    const jobTitle = job?.role_title ?? "this role"
+    const openingContent = buildOpeningPrompt(gapRequirement, jobTitle)
+
+    const { data: openingMsg } = await supabase.from("coach_messages")
+      .insert({ session_id: newSession.id, role: "assistant", content: openingContent })
+      .select("id,role,content,created_at").single()
+
+    return NextResponse.json({
+      sessionId: newSession.id, isNew: true,
+      messages: openingMsg ? [openingMsg] : [],
+      pendingDrafts: [],
+    })
+  } catch (error) {
+    console.error("[coach/sessions] Error:", error)
+    return NextResponse.json(
+      { success: false, error: "server_error", user_message: "Something went wrong." },
+      { status: 500 }
+    )
+  }
+}

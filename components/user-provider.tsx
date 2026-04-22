@@ -1,165 +1,64 @@
-"use client"
+'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
-import type { User } from "@supabase/supabase-js"
-
-interface UserProfile {
-  id: string
-  user_id: string
-  full_name: string | null
-  email: string | null
-  phone: string | null
-  location: string | null
-  summary: string | null
-  skills: string[] | null
-  experience: unknown[] | null
-  education: unknown[] | null
-  certifications: string[] | null
-  links: Record<string, string> | null
-  avatar_url: string | null
-}
+import { createContext, useContext, useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import type { User } from '@supabase/supabase-js'
 
 interface UserContextType {
   user: User | null
-  profile: UserProfile | null
   isLoading: boolean
   signOut: () => Promise<void>
-  refreshProfile: () => Promise<void>
 }
 
 const UserContext = createContext<UserContextType>({
   user: null,
-  profile: null,
   isLoading: true,
   signOut: async () => {},
-  refreshProfile: async () => {},
 })
 
 export function useUser() {
   const context = useContext(UserContext)
   if (!context) {
-    throw new Error("useUser must be used within a UserProvider")
+    throw new Error('useUser must be used within a UserProvider')
   }
   return context
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-
-  const fetchProfile = useCallback(async (userId: string) => {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from("user_profile")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle()
-    
-    if (data) {
-      setProfile(data as UserProfile)
-    } else {
-      setProfile(null)
-    }
-  }, [])
-
-  const refreshProfile = useCallback(async () => {
-    if (user?.id) {
-      await fetchProfile(user.id)
-    }
-  }, [user?.id, fetchProfile])
 
   useEffect(() => {
     const supabase = createClient()
 
-    // Helper to check if error is a lock error
-    const isLockError = (error: unknown): boolean => {
-      const msg = error instanceof Error ? error.message : String(error)
-      return msg.includes("Lock") || msg.includes("released because another request")
-    }
-
-    // Get initial session
     const initializeAuth = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        setUser(user)
-        
-        if (user) {
-          await fetchProfile(user.id)
-        }
-      } catch (error) {
-        // Silently ignore lock errors - these happen when multiple requests compete for the auth token
-        // This is expected behavior and not a real error
-        if (!isLockError(error)) {
-          console.error("Error initializing auth:", error)
-        }
-        // Lock errors are expected and can be safely ignored
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    // Global handler for unhandled promise rejections (lock errors)
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (isLockError(event.reason)) {
-        event.preventDefault() // Prevent console error
-      }
-    }
-    
-    if (typeof window !== "undefined") {
-      window.addEventListener("unhandledrejection", handleUnhandledRejection)
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+      setIsLoading(false)
     }
 
     initializeAuth()
-    
-    // Cleanup
-    const cleanupRejectionHandler = () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("unhandledrejection", handleUnhandledRejection)
-      }
-    }
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        const currentUser = session?.user ?? null
-        setUser(currentUser)
-
-        if (currentUser) {
-          await fetchProfile(currentUser.id)
-        } else {
-          setProfile(null)
-        }
-
-        if (event === "SIGNED_OUT") {
-          setProfile(null)
-        }
-      }
+      (_event, session) => {
+        setUser(session?.user ?? null)
+      },
     )
 
     return () => {
       subscription.unsubscribe()
-      cleanupRejectionHandler()
     }
-  }, [fetchProfile])
+  }, [])
 
   const signOut = async () => {
     const supabase = createClient()
-    
-    // Clear local state first
     setUser(null)
-    setProfile(null)
-    
-    // Sign out from Supabase - don't await, just fire and redirect
-    supabase.auth.signOut().catch(() => {})
-    
-    // Redirect immediately
-    window.location.href = "/login"
+    await supabase.auth.signOut()
+    window.location.href = '/login'
   }
 
   return (
-    <UserContext.Provider value={{ user, profile, isLoading, signOut, refreshProfile }}>
+    <UserContext.Provider value={{ user, isLoading, signOut }}>
       {children}
     </UserContext.Provider>
   )

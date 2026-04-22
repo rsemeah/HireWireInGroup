@@ -1,73 +1,12 @@
-import { DiagonalStripes } from "@/components/off-white-stripes"
-import { HireWireLogo } from "@/components/hirewire-logo"
-
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen flex">
-      {/* Left side - Branding with Supreme Red */}
-      <div className="hidden lg:flex lg:w-1/2 bg-[#BD0A0A] relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#BD0A0A] to-[#8a0808]" />
-        
-        {/* Off-White diagonal stripes in corners */}
-        <DiagonalStripes position="top-left" size="lg" variant="white" opacity={0.15} />
-        <DiagonalStripes position="bottom-right" size="lg" variant="white" opacity={0.1} />
-        <div className="relative z-10 flex flex-col px-12 py-12 text-white h-full">
-          {/* Large centered logo - takes up upper 60% of panel */}
-          <div className="flex-[3] flex items-center justify-center px-8">
-            <div className="w-full max-w-[580px]">
-              <HireWireLogo variant="light" size="xl" />
-            </div>
-          </div>
-          
-          {/* Main content at bottom - takes up lower 40% */}
-          <div className="flex-[2] flex flex-col justify-end space-y-6">
-            <h1 className="text-4xl font-serif italic font-medium leading-tight">
-              Know Before You Apply
-            </h1>
-            <p className="text-lg text-white/80 max-w-md leading-relaxed">
-              Stop guessing. HireWire scores opportunities, generates tailored materials, 
-              and tracks your pipeline — so you only invest time in roles worth pursuing.
-            </p>
-            <div className="flex gap-8 text-sm text-white/60 pt-4">
-              <div>
-                <div className="text-2xl font-bold text-white">85%</div>
-                <div>Match accuracy</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">10x</div>
-                <div>Faster prep</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-white">100%</div>
-                <div>Evidence-backed</div>
-              </div>
-            </div>
-            <div className="text-sm text-white/50 pt-4">
-              Trusted by professionals who value their time.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right side - Auth content */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-background relative overflow-hidden">
-        {/* Off-White diagonal stripes - symmetric with left panel */}
-        <DiagonalStripes position="top-right" size="lg" variant="black" opacity={0.08} />
-        <DiagonalStripes position="bottom-left" size="lg" variant="black" opacity={0.06} />
-        
-        <div className="w-full max-w-md relative z-10">
-          {/* Mobile logo - positioned at top */}
-          <div className="lg:hidden mb-12 flex justify-center -mt-16">
-            <div className="w-48">
-              <HireWireLogo variant="red" size="lg" />
-            </div>
-          </div>
-          {children}
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+      <div className="w-full max-w-2xl rounded-3xl border border-border bg-card p-8 shadow-sm">
+        {children}
       </div>
     </div>
   )
