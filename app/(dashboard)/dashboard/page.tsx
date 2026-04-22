@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { getProfileLinks } from '@/lib/actions/profile-links'
+import { ProfileLinksWidget } from '@/components/profile-links-widget'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -31,6 +33,8 @@ export default async function DashboardPage() {
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(20)
+
+  const { links: profileLinks } = await getProfileLinks()
 
   const jobList = jobs ?? []
   const generatedCount = jobList.filter(j => j.generated_resume).length
@@ -90,6 +94,8 @@ export default async function DashboardPage() {
           <p className="text-3xl font-semibold mt-1">{appliedCount}</p>
         </div>
       </div>
+
+      <ProfileLinksWidget initialLinks={profileLinks} />
 
       {jobList.length > 0 ? (
         <div className="rounded-xl border border-border bg-card">
