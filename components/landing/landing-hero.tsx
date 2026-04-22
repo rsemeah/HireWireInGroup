@@ -86,8 +86,8 @@ export function LandingHero() {
 
         {/* Body */}
         <p className="text-white/70 text-base md:text-lg max-w-lg leading-relaxed mb-10 text-balance">
-          Stop guessing. HireWire scores opportunities, generates tailored
-          materials, and tracks your pipeline — so you only invest time in
+          Stop guessing. HireWire scores your real fit against every job and
+          generates evidence-backed materials — so you only invest time in
           roles worth pursuing.
         </p>
 

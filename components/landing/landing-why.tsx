@@ -1,4 +1,4 @@
-import { Target, Shield, BarChart3, BookOpen, Bot, Layers } from "lucide-react"
+import { Target, Shield, BarChart3, BookOpen } from "lucide-react"
 
 const FEATURES = [
   {
@@ -24,18 +24,6 @@ const FEATURES = [
     title: "Explainable scores",
     description:
       "Not just a number. You get a full breakdown: experience relevance, skills match, seniority alignment, ATS keyword coverage — and exactly what to do about each.",
-  },
-  {
-    icon: Bot,
-    title: "AI career coach",
-    description:
-      "A context-aware assistant that knows your evidence, your active jobs, and your application history. Ask it anything about your search.",
-  },
-  {
-    icon: Layers,
-    title: "Full pipeline tracking",
-    description:
-      "Track every application from research to offer. Know your apply rate, interview conversion, and where applications go quiet.",
   },
 ]
 

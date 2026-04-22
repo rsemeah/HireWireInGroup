@@ -8,7 +8,7 @@ const FREE_FEATURES = [
   "5 document generations",
   "Unlimited evidence library",
   "Job analysis & scoring",
-  "Dashboard & pipeline tracking",
+  "Jobs dashboard",
 ]
 
 const PRO_FEATURES = [

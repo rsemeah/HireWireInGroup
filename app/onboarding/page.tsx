@@ -15,7 +15,6 @@ import {
   FileText,
   Target,
   Upload,
-  Sparkles,
   CheckCircle2,
   X,
   ChevronRight,
@@ -215,15 +214,6 @@ export default function OnboardingPage() {
                   <div className="font-medium">Evidence-Backed Materials</div>
                   <div className="text-sm text-muted-foreground">
                     Resumes and cover letters built from your real achievements
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50">
-                <Sparkles className="h-5 w-5 mt-0.5 text-primary" />
-                <div>
-                  <div className="font-medium">AI Career Coach</div>
-                  <div className="text-sm text-muted-foreground">
-                    Personal guidance to strengthen your evidence for each role
                   </div>
                 </div>
               </div>

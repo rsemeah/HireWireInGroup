@@ -40,6 +40,19 @@ export default async function DashboardLayout({
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
+      <footer className="border-t border-border mt-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} HireWire</span>
+          <div className="flex gap-4">
+            <a href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy
+            </a>
+            <a href="/terms" className="hover:text-foreground transition-colors">
+              Terms
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
