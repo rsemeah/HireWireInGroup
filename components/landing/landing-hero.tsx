@@ -65,11 +65,11 @@ export function LandingHero() {
       <div className="relative mx-auto max-w-5xl px-6 py-20 md:py-28 flex flex-col items-center text-center">
 
         {/* HireWire logo image — barbed wire graffiti mark */}
-        <div className="mb-10 md:mb-14 w-full max-w-xs md:max-w-sm">
+        <div className="mb-10 md:mb-14 w-full max-w-sm md:max-w-xl">
           <HireWireLogo variant="light" size="xl" />
           {/* Abloh-style quotation marks label — signature design language */}
-          <p className="text-white/50 text-xs tracking-[0.3em] uppercase mt-3 font-mono text-center">
-            {'"Career Operating OS"'}
+          <p className="text-white/50 text-xs tracking-[0.3em] uppercase mt-1 font-mono text-center">
+            {'"Career OS"'}
           </p>
         </div>
 
