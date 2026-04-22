@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     // ── 5. Pre-fill user_profile if fields are empty ─────────────────────────
     const { data: profile } = await supabase
       .from("user_profile")
-      .select("full_name, location, summary, skills, links, email, phone")
+      .select("full_name, location, summary, skills, email, phone")
       .eq("user_id", userId)
       .single()
 
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
       }
       if (!profile.email && parsed.email) updates.email = parsed.email
       if (!profile.phone && parsed.phone) updates.phone = parsed.phone
-      // Write parsed links into user_profile_links (canonical table), not legacy JSONB
+      // Write parsed links into user_profile_links (canonical table)
       const linkCandidates: { link_type: string; url: string }[] = []
       if (parsed.linkedin_url) linkCandidates.push({ link_type: "linkedin", url: parsed.linkedin_url })
       if (parsed.github_url) linkCandidates.push({ link_type: "github", url: parsed.github_url })
